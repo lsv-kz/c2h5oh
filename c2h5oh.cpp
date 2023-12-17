@@ -339,39 +339,3 @@ int main_proc()
 
     return 0;
 }
-//======================================================================
-pid_t create_child(int sock)
-{
-    pid_t pid;
-    errno = 0;
-    pid = fork();
-    if (pid == 0)
-    {
-        uid_t uid = getuid();
-        if (uid == 0)
-        {
-            if (setgid(conf->server_gid) == -1)
-            {
-                fprintf(stderr, "<%s:%d> Error setgid(%u): %s\n", __func__, __LINE__, conf->server_gid, strerror(errno));
-                exit(1);
-            }
-
-            if (setuid(conf->server_gid) == -1)
-            {
-                fprintf(stderr, "<%s:%d> Error setuid(%u): %s\n", __func__, __LINE__, conf->server_gid, strerror(errno));
-                exit(1);
-            }
-        }
-
-        manager(sock);
-        close_logs();
-        exit(0);
-    }
-    else if (pid < 0)
-    {
-        fprintf(stderr, "<%s:%d> Error fork(): %s\n", __func__, __LINE__, strerror(errno));
-        return -1;
-    }
-
-    return pid;
-}
