@@ -122,8 +122,8 @@ int decode(const char *s_in, int len_in, char *s_out, int len)
 
             *p = (char)i;
         }
-        else if (c == '+')
-            *p = ' ';
+        /*else if (c == '+')
+            *p = ' ';*/
         else
             *p = c;
 

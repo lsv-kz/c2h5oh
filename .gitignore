@@ -1,3 +1,4 @@
 objs/*.o
 c2h5oh
 logs/*.log
+cert/*

@@ -67,7 +67,7 @@ void create_conf_file(const char *path)
     fprintf(f, "MaxConnectionPerThr  768\n");
     fprintf(f, "#MaxWorkConnPerThr  256\n"); 
     fprintf(f, "NumWorkThreads  2\n");
-    fprintf(f, "NumResponseThreads  2\n");
+    fprintf(f, "NumParseReqThreads  2\n");
     fprintf(f, "MaxCgiProc  15\n\n");
 
     fprintf(f, "MaxRequestsPerClient  100\n");
@@ -331,8 +331,8 @@ int read_conf_file(FILE *fconf)
                 c.BalancedLoad = (char)tolower(s2[0]);
             else if ((s1 == "NumWorkThreads") && is_number(s2.c_str()))
                 s2 >> c.NumWorkThreads;
-            else if ((s1 == "NumResponseThreads") && is_number(s2.c_str()))
-                s2 >> c.NumResponseThreads;
+            else if ((s1 == "NumParseReqThreads") && is_number(s2.c_str()))
+                s2 >> c.NumParseReqThreads;
             else if ((s1 == "MaxCgiProc") && is_number(s2.c_str()))
                 s2 >> c.MaxCgiProc;
             else if ((s1 == "MaxRequestsPerClient") && is_number(s2.c_str()))
@@ -504,9 +504,9 @@ int read_conf_file(FILE *fconf)
         return -1;
     }
     //------------------------------------------------------------------
-    if ((conf->NumResponseThreads > MAX_RESPONSE_THREADS) || (conf->NumResponseThreads < 1))
+    if ((conf->NumParseReqThreads > MAX_PARSE_REQ_THREADS) || (conf->NumParseReqThreads < 1))
     {
-        fprintf(stderr, "<%s:%d> Error: NumThreads=%d > %d\n", __func__, __LINE__, conf->NumResponseThreads, MAX_RESPONSE_THREADS);
+        fprintf(stderr, "<%s:%d> Error: NumParseReqThreads=%d > %d\n", __func__, __LINE__, conf->NumParseReqThreads, MAX_PARSE_REQ_THREADS);
         return -1;
     }
     //------------------------------------------------------------------

@@ -4,8 +4,8 @@ using namespace std;
 //======================================================================
 void init_openssl()
 {
-    //SSL_library_init();
-    //OpenSSL_add_ssl_algorithms();
+    SSL_library_init();
+    OpenSSL_add_ssl_algorithms();
     ////OpenSSL_add_all_algorithms();
     //SSL_load_error_strings();
     //ERR_load_crypto_strings();

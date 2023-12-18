@@ -2,66 +2,10 @@
 #include <sys/select.h>
 
 using namespace std;
-
-int fcgi_in_ = 0, fcgi_out_ = 0;
 //======================================================================
 static mutex mtx_conn;
 static condition_variable cond_close_conn;
 static int num_conn = 0;
-//======================================================================
-RequestManager::RequestManager()
-{
-    list_start = list_end = NULL;
-    all_req = stop_manager = 0;
-}
-//----------------------------------------------------------------------
-RequestManager::~RequestManager() {}
-//----------------------------------------------------------------------
-void RequestManager::push_resp_list(Connect *req)
-{
-mtx_list.lock();
-    req->next = NULL;
-    req->prev = list_end;
-    if (list_start)
-    {
-        list_end->next = req;
-        list_end = req;
-    }
-    else
-        list_start = list_end = req;
-
-    ++all_req;
-mtx_list.unlock();
-    cond_list.notify_one();
-}
-//----------------------------------------------------------------------
-Connect *RequestManager::pop_resp_list()
-{
-unique_lock<mutex> lk(mtx_list);
-    while ((list_start == NULL) && !stop_manager)
-    {
-        cond_list.wait(lk);
-    }
-    if (stop_manager)
-        return NULL;
-
-    Connect *req = list_start;
-    if (list_start->next)
-    {
-        list_start->next->prev = NULL;
-        list_start = list_start->next;
-    }
-    else
-        list_start = list_end = NULL;
-
-    return req;
-}
-//----------------------------------------------------------------------
-void RequestManager::close_manager()
-{
-    stop_manager = 1;
-    cond_list.notify_all();
-}
 //======================================================================
 void start_conn()
 {
@@ -206,27 +150,16 @@ void end_response(Connect *r)
     }
 }
 //======================================================================
-static RequestManager *ReqMan;
-//======================================================================
-void push_resp_list(Connect *r)
-{
-    ReqMan->push_resp_list(r);
-}
-//----------------------------------------------------------------------
-Connect *pop_resp_list()
-{
-    return ReqMan->pop_resp_list();
-}
-//======================================================================
 unsigned long allConn = 0;
 void print_num_conn();
+unsigned long get_all_request();
 //======================================================================
 static void signal_handler_child(int sig)
 {
     if (sig == SIGINT)
     {
-        print_err("<%s:%d> ### SIGINT ### all_conn=%u, open_conn=%d, all_req=%d\n", 
-                    __func__, __LINE__, allConn, num_conn, ReqMan->get_all_request());
+        print_err("<%s:%d> ### SIGINT ### all_conn=%lu, all_req=%lu, open_conn=%d\n", 
+                    __func__, __LINE__, allConn, get_all_request(), num_conn);
         print_num_conn();
     }
     else if (sig == SIGTERM)
@@ -254,17 +187,10 @@ static void signal_handler_child(int sig)
 Connect *create_req(void);
 int event_handler_cl_new();
 void event_handler_cl_delete();
+void close_parse_req_threads();
 //======================================================================
 void manager(int sockServer)
 {
-    ReqMan = new(nothrow) RequestManager;
-    if (!ReqMan)
-    {
-        print_err("<%s:%d> *********** Exit child ***********\n", __func__, __LINE__);
-        close_logs();
-        exit(1);
-    }
-
     //------------------------------------------------------------------
     if (signal(SIGINT, signal_handler_child) == SIG_ERR)
     {
@@ -308,13 +234,13 @@ void manager(int sockServer)
     }
     //------------------------------------------------------------------
     unsigned int n = 0;
-    while (n < conf->NumResponseThreads)
+    while (n < conf->NumParseReqThreads)
     {
-        thread resp_thr;
+        thread t;
         try
         {
-            resp_thr = thread(response1);
-            resp_thr.detach();
+            t = thread(parse_request_thread);
+            t.detach();
         }
         catch (...)
         {
@@ -469,15 +395,12 @@ void manager(int sockServer)
     if (work_thr)
         delete [] work_thr;
     event_handler_cl_delete();
-    //wait_close_all_conn();
     close(sockServer);
 
-    print_err("<%s:%d> all_conn=%u, all_req=%u; open_conn=%d\n",
-                    __func__, __LINE__, allConn, ReqMan->get_all_request(), num_conn);
+    print_err("<%s:%d> all_conn=%lu, all_req=%lu; open_conn=%d\n",
+                    __func__, __LINE__, allConn, get_all_request(), num_conn);
+    close_parse_req_threads();
 
-    ReqMan->close_manager();
-
-    delete ReqMan;
     usleep(100000);
 }
 //======================================================================

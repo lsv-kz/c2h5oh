@@ -2,14 +2,86 @@
 
 using namespace std;
 //======================================================================
-void response1()
+static ParseThrClass parse_thr_cl;
+//----------------------------------------------------------------------
+ParseThrClass::ParseThrClass()
+{
+    list_start = list_end = NULL;
+    all_req = 0;
+    thr_exit = 0;
+}
+//----------------------------------------------------------------------
+ParseThrClass::~ParseThrClass() {}
+//----------------------------------------------------------------------
+void ParseThrClass::push_resp_list(Connect *req)
+{
+mtx_list.lock();
+    req->next = NULL;
+    req->prev = list_end;
+    if (list_start)
+    {
+        list_end->next = req;
+        list_end = req;
+    }
+    else
+        list_start = list_end = req;
+
+    ++all_req;
+mtx_list.unlock();
+    cond_list.notify_one();
+}
+//----------------------------------------------------------------------
+Connect *ParseThrClass::pop_resp_list()
+{
+unique_lock<mutex> lk(mtx_list);
+    while ((list_start == NULL) && !thr_exit)
+    {
+        cond_list.wait(lk);
+    }
+    if (thr_exit)
+        return NULL;
+
+    Connect *req = list_start;
+    if (list_start->next)
+    {
+        list_start->next->prev = NULL;
+        list_start = list_start->next;
+    }
+    else
+        list_start = list_end = NULL;
+
+    return req;
+}
+//----------------------------------------------------------------------
+void ParseThrClass::close_threads()
+{
+    thr_exit = 1;
+    cond_list.notify_all();
+}
+//======================================================================
+void push_resp_list(Connect *r)
+{
+    parse_thr_cl.push_resp_list(r);
+}
+//======================================================================
+void close_parse_req_threads()
+{
+    parse_thr_cl.close_threads();
+}
+//======================================================================
+unsigned long get_all_request()
+{
+    return parse_thr_cl.get_all_request();
+}
+//======================================================================
+void parse_request_thread()
 {
     const char *p;
     Connect *req;
 
     while (1)
     {
-        req = pop_resp_list();
+        req = parse_thr_cl.pop_resp_list();
         if (!req)
         {
             //print_err("<%s:%d>  Error pop_resp_list()=NULL\n", __func__, __LINE__);
@@ -92,7 +164,7 @@ void response1()
             (req->reqMethod == M_POST) || 
             (req->reqMethod == M_OPTIONS))
         {
-            int ret = response2(req);
+            int ret = prepare_response(req);
             if (ret == 1)
             {// "req" may be free !!!
                 continue;
@@ -156,7 +228,7 @@ int fastcgi(Connect* req, const char* uri)
     return 1;
 }
 //======================================================================
-int response2(Connect *req)
+int prepare_response(Connect *req)
 {
     struct stat st;
     char *p = strstr(req->decodeUri, ".php");

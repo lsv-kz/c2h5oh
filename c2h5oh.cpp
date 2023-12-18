@@ -104,7 +104,7 @@ void print_config()
          << "\n   MaxConnectionPerThr    : " << conf->MaxConnectionPerThr
          << "\n   MaxWorkConnPerThr      : " << conf->MaxWorkConnPerThr
          << "\n   NumWorkThreads         : " << conf->NumWorkThreads
-         << "\n   NumResponseThreads     : " << conf->NumResponseThreads
+         << "\n   NumParseReqThreads     : " << conf->NumParseReqThreads
          << "\n\n   MaxRequestsPerClient   : " << conf->MaxRequestsPerClient
          << "\n   MaxCgiProc             : " << conf->MaxCgiProc
          << "\n   TimeoutKeepAlive       : " << conf->TimeoutKeepAlive

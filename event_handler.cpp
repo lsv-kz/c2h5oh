@@ -409,8 +409,8 @@ void EventHandlerClass::push_send_file(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::push_pollin_list(Connect *r)
 {
-    //r->io_status = WAIT;
-    r->io_status = WORK;
+    r->io_status = WAIT;
+    //r->io_status = WORK;
     r->io_direct = FROM_CLIENT;
     r->source_entity = NO_ENTITY;
     add_wait_list(r);
@@ -685,7 +685,6 @@ void EventHandlerClass::worker(Connect *r)
     }
     else if (r->operation == READ_REQUEST)
     {
-        r->timeout = conf->Timeout;
         int ret = read_request_headers(r);
         if (ret < 0)
         {
@@ -704,7 +703,10 @@ void EventHandlerClass::worker(Connect *r)
             push_resp_list(r);
         }
         else
+        {
+            r->timeout = conf->Timeout;
             r->sock_timer = 0;
+        }
     }
     else if (r->operation == SSL_ACCEPT)
     {

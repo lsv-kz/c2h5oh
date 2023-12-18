@@ -57,7 +57,7 @@ const int  SIZE_BUF_REQUEST = 8192;
 const int  MAX_HEADERS = 25;
 const int  ERR_TRY_AGAIN = -1000;
 const int  MAX_WORK_THREADS = 8;
-const int  MAX_RESPONSE_THREADS = 8;
+const int  MAX_PARSE_REQ_THREADS = 8;
 const char boundary[] = "---------a9b5r7a4c0a2d5a1b8r3a";
 
 enum {
@@ -160,7 +160,7 @@ public:
     char BalancedLoad;
 
     unsigned int NumWorkThreads;
-    unsigned int NumResponseThreads;
+    unsigned int NumParseReqThreads;
     unsigned int MaxCgiProc;
 
     unsigned int MaxRanges;
@@ -356,13 +356,13 @@ class EventHandlerClass
 {
     std::mutex mtx_thr, mtx_cgi;
     std::condition_variable cond_thr;
-    
+
+    int num_thr;
     int num_wait, num_work;
     int stat_work;
     int cgi_work;
     int close_thr;
-    int num_thr;
-    
+
     Connect *work_list_start;
     Connect *work_list_end;
 
@@ -437,7 +437,7 @@ public:
     void close_event_handler(void);
 };
 //----------------------------------------------------------------------
-class RequestManager
+class ParseThrClass
 {
 private:
     Connect *list_start;
@@ -446,16 +446,17 @@ private:
     std::mutex mtx_list;
     std::condition_variable cond_list;
 
-    unsigned int all_req, stop_manager;
+    unsigned long all_req;
+    int thr_exit;
 
 public:
-    RequestManager(const RequestManager&) = delete;
-    RequestManager();
-    ~RequestManager();
+    ParseThrClass(const ParseThrClass&) = delete;
+    ParseThrClass();
+    ~ParseThrClass();
     //-------------------------------
     void push_resp_list(Connect *req);
     Connect *pop_resp_list();
-    void close_manager();
+    void close_threads();
     unsigned int get_all_request()
     {
         return all_req;
@@ -464,8 +465,8 @@ public:
 //----------------------------------------------------------------------
 extern char **environ;
 //----------------------------------------------------------------------
-void response1();
-int response2(Connect *req);
+void parse_request_thread();
+int prepare_response(Connect *req);
 int options(Connect *req);
 int index_dir(Connect *req, std::string& path);
 //----------------------------------------------------------------------
@@ -518,7 +519,6 @@ void print_err(Connect *req, const char *format, ...);
 void print_log(Connect *req);
 //----------------------------------------------------------------------
 void push_resp_list(Connect *r);
-Connect *pop_resp_list();
 void end_response(Connect *req);
 void close_connect(Connect *req);
 //----------------------------------------------------------------------
