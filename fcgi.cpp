@@ -423,16 +423,10 @@ int EventHandlerClass::fcgi_stdout(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0
                     if (errno == EAGAIN)
                         return ERR_TRY_AGAIN;
                     else
-                    {
-                        r->err = -1;
                         return -1;
-                    }
                 }
                 else if (ret == 0)
-                {
-                    r->err = -1;
                     return -1;
-                }
 
                 r->cgi.len_buf = ret;
                 r->cgi.p = r->cgi.buf + 8;
@@ -489,10 +483,7 @@ int EventHandlerClass::fcgi_stdout(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0
             if (ret == ERR_TRY_AGAIN)
                 return ERR_TRY_AGAIN;
             else
-            {
-                r->err = -1;
                 return -1;
-            }
         }
 
         r->cgi.p += ret;
@@ -535,10 +526,7 @@ int EventHandlerClass::fcgi_read_http_headers(Connect *r)
     else
         num_read = r->cgi.size_buf - r->cgi.len_buf - 1;
     if (num_read <= 0)
-    {
-        r->err = -RS502;
         return -1;
-    }
 
     int n = read(r->fcgi.fd, r->cgi.p, num_read);
     if (n == -1)
@@ -547,16 +535,10 @@ int EventHandlerClass::fcgi_read_http_headers(Connect *r)
         if (errno == EAGAIN)
             return ERR_TRY_AGAIN;
         else
-        {
-            r->err = -RS502;
             return -1;
-        }
     }
     else if (n == 0)
-    {
-        r->err = -RS502;
         return -1;
-    }
 
     r->fcgi.dataLen -= n;
     r->lenTail += n;
@@ -571,10 +553,7 @@ int EventHandlerClass::fcgi_read_http_headers(Connect *r)
         return r->cgi.len_buf;
     }
     else if (ret < 0) // error
-    {
-        r->err = -RS502;
         return -1;
-    }
 
     return 0;
 }

@@ -2,18 +2,18 @@
 
 using namespace std;
 //======================================================================
-static ParseThrClass parse_thr_cl;
+static LinkedList conn_list;
 //----------------------------------------------------------------------
-ParseThrClass::ParseThrClass()
+LinkedList::LinkedList()
 {
     list_start = list_end = NULL;
     all_req = 0;
     thr_exit = 0;
 }
 //----------------------------------------------------------------------
-ParseThrClass::~ParseThrClass() {}
+LinkedList::~LinkedList() {}
 //----------------------------------------------------------------------
-void ParseThrClass::push_resp_list(Connect *req)
+void LinkedList::push_resp_list(Connect *req)
 {
 mtx_list.lock();
     req->next = NULL;
@@ -31,7 +31,7 @@ mtx_list.unlock();
     cond_list.notify_one();
 }
 //----------------------------------------------------------------------
-Connect *ParseThrClass::pop_resp_list()
+Connect *LinkedList::pop_resp_list()
 {
 unique_lock<mutex> lk(mtx_list);
     while ((list_start == NULL) && !thr_exit)
@@ -53,7 +53,7 @@ unique_lock<mutex> lk(mtx_list);
     return req;
 }
 //----------------------------------------------------------------------
-void ParseThrClass::close_threads()
+void LinkedList::close_threads()
 {
     thr_exit = 1;
     cond_list.notify_all();
@@ -61,17 +61,17 @@ void ParseThrClass::close_threads()
 //======================================================================
 void push_resp_list(Connect *r)
 {
-    parse_thr_cl.push_resp_list(r);
+    conn_list.push_resp_list(r);
 }
 //======================================================================
 void close_parse_req_threads()
 {
-    parse_thr_cl.close_threads();
+    conn_list.close_threads();
 }
 //======================================================================
 unsigned long get_all_request()
 {
-    return parse_thr_cl.get_all_request();
+    return conn_list.get_all_request();
 }
 //======================================================================
 void parse_request_thread()
@@ -81,7 +81,7 @@ void parse_request_thread()
 
     while (1)
     {
-        req = parse_thr_cl.pop_resp_list();
+        req = conn_list.pop_resp_list();
         if (!req)
         {
             //print_err("<%s:%d>  Error pop_resp_list()=NULL\n", __func__, __LINE__);

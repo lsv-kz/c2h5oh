@@ -434,10 +434,10 @@ public:
     void push_send_multipart(Connect *r);
     void push_send_html(Connect *r);
     void push_ssl_shutdown(Connect *r);
-    void close_event_handler(void);
+    void close_event_handler();
 };
 //----------------------------------------------------------------------
-class ParseThrClass
+class LinkedList
 {
 private:
     Connect *list_start;
@@ -450,9 +450,9 @@ private:
     int thr_exit;
 
 public:
-    ParseThrClass(const ParseThrClass&) = delete;
-    ParseThrClass();
-    ~ParseThrClass();
+    LinkedList(const LinkedList&) = delete;
+    LinkedList();
+    ~LinkedList();
     //-------------------------------
     void push_resp_list(Connect *req);
     Connect *pop_resp_list();
@@ -513,7 +513,7 @@ int parse_headers(Connect *req, char *s, int n);
 int find_empty_line(Connect *req);
 //----------------------------------------------------------------------
 void create_logfiles(const std::string &);
-void close_logs(void);
+void close_logs();
 void print_err(const char *format, ...);
 void print_err(Connect *req, const char *format, ...);
 void print_log(Connect *req);
@@ -539,7 +539,7 @@ void init_openssl();
 void cleanup_openssl();
 SSL_CTX *create_context();
 int configure_context(SSL_CTX *ctx);
-SSL_CTX *Init_SSL(void);
+SSL_CTX *Init_SSL();
 const char *ssl_strerror(int err);
 int ssl_read(Connect *req, char *buf, int len);
 int ssl_write(Connect *req, const char *buf, int len);

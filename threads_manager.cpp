@@ -184,7 +184,7 @@ static void signal_handler_child(int sig)
         print_err("<%s:%d> sig=%d\n", __func__, __LINE__, sig);
 }
 //======================================================================
-Connect *create_req(void);
+Connect *create_req();
 int event_handler_cl_new();
 void event_handler_cl_delete();
 void close_parse_req_threads();
