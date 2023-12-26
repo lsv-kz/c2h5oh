@@ -5,7 +5,7 @@ using namespace std;
 static Config c;
 const Config* const conf = &c;
 //======================================================================
-int check_path(string & path)
+int check_path(string& path)
 {
     struct stat st;
 

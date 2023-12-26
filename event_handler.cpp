@@ -410,7 +410,6 @@ void EventHandlerClass::push_send_file(Connect *r)
 void EventHandlerClass::push_pollin_list(Connect *r)
 {
     r->io_status = WAIT;
-    //r->io_status = WORK;
     r->io_direct = FROM_CLIENT;
     r->source_entity = NO_ENTITY;
     add_wait_list(r);
@@ -982,7 +981,7 @@ printf("<%s:%d> +++++ worker thread %d run +++++\n", __func__, __LINE__, n_thr);
 #endif
         if (event_handler_cl[n_thr].snd_buf)
             delete [] event_handler_cl[n_thr].snd_buf;
-    //printf("<%s:%d> ***** exit thread %d *****\n", __func__, __LINE__, n_thr);
+    //print_err("<%s:%d> ***** exit thread %d *****\n", __func__, __LINE__, n_thr);
 }
 //======================================================================
 int get_light_thread_number()

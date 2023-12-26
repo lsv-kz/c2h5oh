@@ -4,13 +4,6 @@ using namespace std;
 //======================================================================
 static LinkedList conn_list;
 //----------------------------------------------------------------------
-LinkedList::LinkedList()
-{
-    list_start = list_end = NULL;
-    all_req = 0;
-    thr_exit = 0;
-}
-//----------------------------------------------------------------------
 LinkedList::~LinkedList() {}
 //----------------------------------------------------------------------
 void LinkedList::push_resp_list(Connect *req)
@@ -57,6 +50,11 @@ void LinkedList::close_threads()
 {
     thr_exit = 1;
     cond_list.notify_all();
+}
+//======================================================================
+void list_init()
+{
+    conn_list.init();
 }
 //======================================================================
 void push_resp_list(Connect *r)

@@ -151,76 +151,16 @@ void end_response(Connect *r)
 }
 //======================================================================
 unsigned long allConn = 0;
-void print_num_conn();
 unsigned long get_all_request();
-//======================================================================
-static void signal_handler_child(int sig)
-{
-    if (sig == SIGINT)
-    {
-        print_err("<%s:%d> ### SIGINT ### all_conn=%lu, all_req=%lu, open_conn=%d\n", 
-                    __func__, __LINE__, allConn, get_all_request(), num_conn);
-        print_num_conn();
-    }
-    else if (sig == SIGTERM)
-    {
-        print_err("<%s:%d> ####### SIGTERM #######\n", __func__, __LINE__);
-        exit(0);
-    }
-    else if (sig == SIGSEGV)
-    {
-        print_err("<%s:%d> ### SIGSEGV ###\n", __func__, __LINE__);
-        exit(1);
-    }
-    else if (sig == SIGUSR1)
-    {
-        print_err("<%s:%d> ### SIGUSR1 ###\n", __func__, __LINE__);
-    }
-    else if (sig == SIGUSR2)
-    {
-        print_err("<%s:%d> ### SIGUSR2 ###\n", __func__, __LINE__);
-    }
-    else
-        print_err("<%s:%d> sig=%d\n", __func__, __LINE__, sig);
-}
-//======================================================================
 Connect *create_req();
 int event_handler_cl_new();
 void event_handler_cl_delete();
 void close_parse_req_threads();
+void list_init();
 //======================================================================
 void manager(int sockServer)
 {
-    //------------------------------------------------------------------
-    if (signal(SIGINT, signal_handler_child) == SIG_ERR)
-    {
-        print_err("<%s:%d> Error signal(SIGINT): %s\n", __func__, __LINE__, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    if (signal(SIGSEGV, signal_handler_child) == SIG_ERR)
-    {
-        print_err("<%s:%d> Error signal(SIGSEGV): %s\n", __func__, __LINE__, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    if (signal(SIGTERM, signal_handler_child) == SIG_ERR)
-    {
-        print_err("<%s:%d> Error signal(SIGTERM): %s\n", __func__, __LINE__, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    if (signal(SIGUSR1, signal_handler_child) == SIG_ERR)
-    {
-        print_err("<%s:%d> Error signal(SIGUSR1): %s\n", __func__, __LINE__, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    if (signal(SIGUSR2, signal_handler_child) == SIG_ERR)
-    {
-        print_err("<%s:%d> Error signal(SIGUSR2): %s\n", __func__, __LINE__, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+    list_init();
     //------------------------------------------------------------------
     if (chdir(conf->DocumentRoot.c_str()))
     {
@@ -234,6 +174,7 @@ void manager(int sockServer)
     }
     //------------------------------------------------------------------
     unsigned int n = 0;
+
     while (n < conf->NumParseReqThreads)
     {
         thread t;
@@ -391,11 +332,10 @@ void manager(int sockServer)
     {
         work_thr[i].join();
     }
-    
+
     if (work_thr)
         delete [] work_thr;
     event_handler_cl_delete();
-    close(sockServer);
 
     print_err("<%s:%d> all_conn=%lu, all_req=%lu; open_conn=%d\n",
                     __func__, __LINE__, allConn, get_all_request(), num_conn);

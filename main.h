@@ -451,9 +451,15 @@ private:
 
 public:
     LinkedList(const LinkedList&) = delete;
-    LinkedList();
+    LinkedList(){}
     ~LinkedList();
     //-------------------------------
+    void init()
+    {
+        list_start = list_end = NULL;
+        all_req = 0;
+        thr_exit = 0;
+    }
     void push_resp_list(Connect *req);
     Connect *pop_resp_list();
     void close_threads();

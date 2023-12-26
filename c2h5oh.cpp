@@ -16,6 +16,7 @@ static int main_proc();
 
 static string pidFile;
 static string confPath;
+static string cwd;
 
 static int startServer = 0, restartServer = 1;
 //======================================================================
@@ -25,20 +26,6 @@ static void signal_handler(int sig)
     {
         print_err("<main> ####### SIGINT #######\n");
     }
-    else if (sig == SIGTERM)
-    {
-        print_err("<main> ####### SIGTERM #######\n");
-        shutdown(sockServer, SHUT_RDWR);
-        close(sockServer);
-        exit(0);
-    }
-    else if (sig == SIGSEGV)
-    {
-        print_err("<main> ####### SIGSEGV #######\n");
-        shutdown(sockServer, SHUT_RDWR);
-        close(sockServer);
-        exit(1);
-    }
     else if (sig == SIGUSR1)
     {
         fprintf(stderr, "<%s> ####### SIGUSR1 #######\n", __func__);
@@ -47,7 +34,7 @@ static void signal_handler(int sig)
     else if (sig == SIGUSR2)
     {
         fprintf(stderr, "<%s> ####### SIGUSR2 #######\n", __func__);
-        exit(0);
+        restartServer = 0;
     }
     else
         fprintf(stderr, "<%s:%d> ? sig=%d\n", __func__, __LINE__, sig);
@@ -89,8 +76,8 @@ void print_config()
 {
     print_limits();
 
-    cout << "   Protocol               : " << (conf->Protocol ? "https" : "http")
-         << "   ServerSoftware         : " << conf->ServerSoftware.c_str()
+    cout << "   Protocol               : " << ((conf->Protocol == HTTPS) ? "https" : "http")
+         << "\n   ServerSoftware         : " << conf->ServerSoftware.c_str()
          << "\n\n   ServerAddr             : " << conf->ServerAddr.c_str()
          << "\n   ServerPort             : " << conf->ServerPort.c_str()
          << "\n\n   ListenBacklog          : " << conf->ListenBacklog
@@ -135,9 +122,48 @@ void print_config()
     }
 }
 //======================================================================
+int get_cwd(string& s)
+{
+    size_t size = 1024;
+    for (int i = 0; i < 5; ++i)
+    {
+        char *p = new(nothrow) char [size];
+        if (!p)
+        {
+            fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+            return -1;
+        }
+        
+        if (getcwd(p, size))
+        {
+            s = p;
+            delete [] p;
+            break;
+        }
+        
+        if (errno == ERANGE)
+        {
+            delete [] p;
+            size *= 2;
+        }
+        else
+        {
+            delete [] p;
+            return -1;
+        }
+    }
+    
+    return 0;
+}
+//======================================================================
 int main(int argc, char *argv[])
 {
     signal(SIGPIPE, SIG_IGN);
+
+    if (get_cwd(cwd))
+    {
+        return 1;
+    }
 
     if (argc == 1)
         confPath = "c2h5oh.conf";
@@ -257,18 +283,6 @@ int main(int argc, char *argv[])
                 break;
             }
 
-            if (signal(SIGTERM, signal_handler) == SIG_ERR)
-            {
-                fprintf(stderr, "<%s:%d> Error signal(SIGTERM): %s\n", __func__, __LINE__, strerror(errno));
-                break;
-            }
-
-            if (signal(SIGSEGV, signal_handler) == SIG_ERR)
-            {
-                fprintf(stderr, "<%s:%d> Error signal(SIGSEGV): %s\n", __func__, __LINE__, strerror(errno));
-                break;
-            }
-
             if (signal(SIGUSR1, signal_handler) == SIG_ERR)
             {
                 fprintf(stderr, "<%s:%d> Error signal(SIGUSR1): %s\n", __func__, __LINE__, strerror(errno));
@@ -335,7 +349,14 @@ int main_proc()
     if (restartServer == 0)
         fprintf(stderr, "<%s> ***** Close *****\n", __func__);
     else
-        fprintf(stderr, "<%s> ***** Reload *****\n", __func__);
+    {
+        fprintf(stderr, "<%s> ***** Reload *****\n\n", __func__);
+        if (chdir(cwd.c_str()))
+        {
+            fprintf(stderr, "<%s:%d> Error chdir(%s): %s\n", __func__, __LINE__, cwd.c_str(), strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+    }
 
     return 0;
 }
