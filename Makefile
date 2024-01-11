@@ -76,5 +76,5 @@ $(OBJSDIR)/index.o: index.cpp main.h string__.h
 
 
 clean:
-	rm -f server
+	rm -f c2h5oh
 	rm -f $(OBJSDIR)/*.o

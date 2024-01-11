@@ -173,8 +173,7 @@ void manager(int sockServer)
         exit(1);
     }
     //------------------------------------------------------------------
-    unsigned int n = 0;
-
+    int n = 0;
     while (n < conf->NumParseReqThreads)
     {
         thread t;
@@ -202,7 +201,7 @@ void manager(int sockServer)
         exit(errno);
     }
 
-    for (unsigned int i = 0; i < conf->NumWorkThreads; ++i)
+    for (int i = 0; i < conf->NumWorkThreads; ++i)
     {
         try
         {
@@ -328,7 +327,7 @@ void manager(int sockServer)
     }
 
     close_work_threads();
-    for (unsigned int i = 0; i < conf->NumWorkThreads; ++i)
+    for (int i = 0; i < conf->NumWorkThreads; ++i)
     {
         work_thr[i].join();
     }

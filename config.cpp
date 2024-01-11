@@ -47,43 +47,47 @@ void create_conf_file(const char *path)
         exit(1);
     }
 
-    fprintf(f, "Protocol  http\n");
-    fprintf(f, "ServerSoftware  ?\n");
-    fprintf(f, "ServerAddr  0.0.0.0\n");
-    fprintf(f, "ServerPort  8080\n\n");
+    fprintf(f, "Protocol             http\n");
+    fprintf(f, "ServerSoftware       ?\n");
+    fprintf(f, "ServerAddr           0.0.0.0\n");
+    fprintf(f, "ServerPort           8080\n\n");
 
-    fprintf(f, "ListenBacklog  128\n");
-    fprintf(f, "TcpCork  n # y/n \n");
-    fprintf(f, "TcpNoDelay  y \n\n");
+    fprintf(f, "DocumentRoot         www/html\n");
+    fprintf(f, "ScriptPath           www/cgi-bin\n");
+    fprintf(f, "LogPath              www/logs\n");
+    fprintf(f, "PidFilePath          www/pid\n\n");
 
-    fprintf(f, "DocumentRoot  www/html\n");
-    fprintf(f, "ScriptPath  www/cgi-bin\n");
-    fprintf(f, "LogPath  www/logs\n");
-    fprintf(f, "PidFilePath  www/pid\n\n");
+    fprintf(f, "ListenBacklog        128\n");
+    fprintf(f, "TcpCork              y # y/n \n");
+    fprintf(f, "TcpNoDelay           y \n\n");
 
-    fprintf(f, "SendFile  y\n");
-    fprintf(f, "SndBufSize  32768\n\n");
+    fprintf(f, "SendFile             y\n");
+    fprintf(f, "SndBufSize           32768\n\n");
 
     fprintf(f, "MaxConnectionPerThr  768\n");
-    fprintf(f, "#MaxWorkConnPerThr  256\n"); 
-    fprintf(f, "NumWorkThreads  2\n");
-    fprintf(f, "NumParseReqThreads  2\n");
-    fprintf(f, "MaxCgiProc  15\n\n");
+    fprintf(f, "MaxWorkConnPerThr    0\n\n");
 
-    fprintf(f, "MaxRequestsPerClient  100\n");
-    fprintf(f, "TimeoutKeepAlive  15\n");
-    fprintf(f, "Timeout  120\n");
-    fprintf(f, "TimeoutCGI  15\n");
-    fprintf(f, "TimeoutPoll  100\n\n");
+    fprintf(f, "BalancedWorkThreads  y\n\n");
 
-    fprintf(f, "MaxRanges  5\n\n");
+    fprintf(f, "NumWorkThreads       2\n");
+    fprintf(f, "NumParseReqThreads   2\n");
+    fprintf(f, "MaxCgiProc           15\n\n");
 
-    fprintf(f, "ClientMaxBodySize  10000000\n\n");
+    fprintf(f, "MaxRequestsPerClient  100\n\n");
 
-    fprintf(f, " UsePHP  n  # [n, php-fpm, php-cgi]\n");
-    fprintf(f, "# PathPHP  127.0.0.1:9000  #  [php-fpm: 127.0.0.1:9000 (/var/run/php-fpm.sock), php-cgi: /usr/bin/php-cgi]\n\n");
+    fprintf(f, "TimeoutKeepAlive     15  # seconds\n");
+    fprintf(f, "Timeout              120 # seconds\n");
+    fprintf(f, "TimeoutCGI           15  # seconds\n");
+    fprintf(f, "TimeoutPoll          100 # milliseconds\n\n");
 
-    fprintf(f, "AutoIndex  n\n");
+    fprintf(f, "MaxRanges            5\n\n");
+
+    fprintf(f, "ClientMaxBodySize    10000000\n\n");
+
+    fprintf(f, "UsePHP               n  # [n, php-fpm, php-cgi]\n");
+    fprintf(f, "#PathPHP             127.0.0.1:9000  #  [php-fpm: 127.0.0.1:9000 (/var/run/php-fpm.sock), php-cgi: /usr/bin/php-cgi]\n\n");
+
+    fprintf(f, "AutoIndex            n\n");
     fprintf(f, "index {\n"
                 "\t#index.html\n"
                 "}\n\n");
@@ -96,10 +100,10 @@ void create_conf_file(const char *path)
                 "\t#/scgi_test  127.0.0.1:9009\n"
                 "}\n\n");
 
-    fprintf(f, "ShowMediaFiles  y #  y/n \n\n");
+    fprintf(f, "ShowMediaFiles       y #  y/n \n\n");
 
-    fprintf(f, "User  root\n");
-    fprintf(f, "Group  www-data\n");
+    fprintf(f, "User                 root\n");
+    fprintf(f, "Group                www-data\n");
 
     fclose(f);
 }
@@ -327,8 +331,8 @@ int read_conf_file(FILE *fconf)
                 s2 >> c.LogPath;
             else if (s1 == "PidFilePath")
                 s2 >> c.PidFilePath;
-            else if ((s1 == "BalancedLoad") && is_bool(s2.c_str()))
-                c.BalancedLoad = (char)tolower(s2[0]);
+            else if ((s1 == "BalancedWorkThreads") && is_bool(s2.c_str()))
+                c.BalancedWorkThreads = (char)tolower(s2[0]);
             else if ((s1 == "NumWorkThreads") && is_number(s2.c_str()))
                 s2 >> c.NumWorkThreads;
             else if ((s1 == "NumParseReqThreads") && is_number(s2.c_str()))
@@ -515,16 +519,15 @@ int read_conf_file(FILE *fconf)
         fprintf(stderr, "<%s:%d> Error: MaxCgiProc=0\n", __func__, __LINE__);
         return -1;
     }
-    //------------------- Setting OPEN_MAX -----------------------------
-    if (conf->MaxConnectionPerThr <= 0)
-    {
-        fprintf(stderr, "<%s:%d> Error config file: MaxWorkConnPerThr=%d\n", __func__, __LINE__, conf->MaxConnectionPerThr);
-        return -1;
-    }
-    
+    //------------------------------------------------------------------
     if (conf->MaxWorkConnPerThr <= 0)
     {
-        fprintf(stderr, "<%s:%d> Error config file: MaxWorkConnPerThr=%d\n", __func__, __LINE__, conf->MaxWorkConnPerThr);
+        c.MaxWorkConnPerThr = INT_MAX;
+    }
+    //------------------------------------------------------------------
+    if (conf->MaxConnectionPerThr <= 0)
+    {
+        fprintf(stderr, "<%s:%d> Error config file: MaxConnectionPerThr=%d\n", __func__, __LINE__, conf->MaxConnectionPerThr);
         return -1;
     }
 
@@ -564,6 +567,7 @@ int read_conf_file(const char *path_conf)
     {
         if (errno == ENOENT)
         {
+            fprintf(stderr, " Error config file not found: %s\n", path_conf);
             char s[8];
             printf("Create config file? [y/n]: ");
             fflush(stdout);

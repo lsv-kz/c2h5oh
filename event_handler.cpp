@@ -23,6 +23,11 @@ void EventHandlerClass::init(int n)
     cgi_wait_list_start = cgi_wait_list_end = NULL;
 }
 //----------------------------------------------------------------------
+long EventHandlerClass::get_num_req()
+{
+    return num_request;
+}
+//----------------------------------------------------------------------
 void EventHandlerClass::del_from_list(Connect *r)
 {
     if (r->operation == DYN_PAGE)
@@ -698,6 +703,7 @@ void EventHandlerClass::worker(Connect *r)
         }
         else if (ret > 0)
         {
+            num_request++;
             del_from_list(r);
             push_resp_list(r);
         }
@@ -988,10 +994,10 @@ int get_light_thread_number()
 {
     int n_thr = 0, n_conn;
 mtx_.lock();
-    if (conf->BalancedLoad == 'y')
+    if (conf->BalancedWorkThreads == 'y')
     {
         n_conn = conn_count[0];
-        for (unsigned int i = 1; i < conf->NumWorkThreads; ++i)
+        for (int i = 1; i < conf->NumWorkThreads; ++i)
         {
             if (n_conn > conn_count[i])
             {
@@ -1009,7 +1015,7 @@ mtx_.lock();
     else
     {
         n_thr = -1;
-        for (unsigned int i = 0; i < conf->NumWorkThreads; ++i)
+        for (int i = 0; i < conf->NumWorkThreads; ++i)
         {
             if (conn_count[i] < conf->MaxConnectionPerThr)
             {
@@ -1065,11 +1071,10 @@ void push_ssl_shutdown(Connect *r)
 void print_num_conn()
 {
 mtx_.lock();
-    for (unsigned int i = 0; i < conf->NumWorkThreads; ++i)
+    for (int i = 0; i < conf->NumWorkThreads; ++i)
     {
-        fprintf(stderr, " {thr-%u connections: %d}", i, conn_count[i]);
+        fprintf(stderr, " <%u> {connections: %d, requests: %ld}\n", i, conn_count[i], event_handler_cl[i].get_num_req());
     }
-    fprintf(stderr, "\n");
 mtx_.unlock();
 }
 //======================================================================
@@ -1105,7 +1110,7 @@ void event_handler_cl_delete()
 //======================================================================
 void close_work_threads()
 {
-    for (unsigned int i = 0; i < conf->NumWorkThreads; ++i)
+    for (int i = 0; i < conf->NumWorkThreads; ++i)
     {
         event_handler_cl[i].close_event_handler();
     }

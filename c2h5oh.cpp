@@ -15,39 +15,46 @@ void manager(int);
 static int main_proc();
 
 static string pidFile;
+const char *nameConfifFile = "/c2h5oh.conf";
 static string confPath;
 static string cwd;
 
 static int startServer = 0, restartServer = 1;
 //======================================================================
-static void signal_handler(int sig)
+static void signal_handler(int signo)
 {
-    if (sig == SIGINT)
+    print_num_conn();
+    if (signo == SIGINT)
     {
         print_err("<main> ####### SIGINT #######\n");
     }
-    else if (sig == SIGUSR1)
+    else if (signo == SIGSEGV)
+    {
+        print_err("<main> ####### SIGSEGV #######\n");
+        exit(1);
+    }
+    else if (signo == SIGUSR1)
     {
         fprintf(stderr, "<%s> ####### SIGUSR1 #######\n", __func__);
         restartServer = 1;
     }
-    else if (sig == SIGUSR2)
+    else if (signo == SIGUSR2)
     {
         fprintf(stderr, "<%s> ####### SIGUSR2 #######\n", __func__);
         restartServer = 0;
     }
     else
-        fprintf(stderr, "<%s:%d> ? sig=%d\n", __func__, __LINE__, sig);
+        fprintf(stderr, "<%s:%d> ? signo=%d (%s)\n", __func__, __LINE__, signo, strsignal(signo));
 }
 //======================================================================
 void print_help(const char *name)
 {
     fprintf(stderr, "Usage: %s [-h] [-p] [-c configfile] [-s signal]\n"
                     "Options:\n"
-                    "   -h              : help\n"
-                    "   -p              : print parameters\n"
-                    "   -c configfile   : default: \"./server.conf\"\n"
-                    "   -s signal       : restart, close, abort\n", name);
+                    "   -h                           : help\n"
+                    "   -p                           : print parameters\n"
+                    "   -c [directory of configfile] : default: \".\"\n"
+                    "   -s signal                    : restart, close, abort\n", name);
 }
 //======================================================================
 void print_limits()
@@ -86,7 +93,7 @@ void print_config()
          << "\n\n   SendFile               : " << conf->SendFile
          << "\n   SndBufSize             : " << conf->SndBufSize
          << "\n\n   NumCpuCores            : " << thread::hardware_concurrency()
-         << "\n   BalancedLoad           : " << conf->BalancedLoad
+         << "\n   BalancedWorkThreads    : " << conf->BalancedWorkThreads
          << "\n   MaxAcceptConnections   : " << conf->MaxAcceptConnections
          << "\n   MaxConnectionPerThr    : " << conf->MaxConnectionPerThr
          << "\n   MaxWorkConnPerThr      : " << conf->MaxWorkConnPerThr
@@ -166,7 +173,10 @@ int main(int argc, char *argv[])
     }
 
     if (argc == 1)
-        confPath = "c2h5oh.conf";
+    {
+        confPath = ".";
+        confPath += nameConfifFile;
+    }
     else
     {
         int c, arg_print = 0;
@@ -177,6 +187,7 @@ int main(int argc, char *argv[])
             {
                 case 'c':
                     confPath = optarg;
+                    confPath += nameConfifFile;
                     break;
                 case 's':
                     sig = optarg;
@@ -194,7 +205,10 @@ int main(int argc, char *argv[])
         }
 
         if (!confPath.size())
-            confPath = "c2h5oh.conf";
+        {
+            confPath = ".";
+            confPath += nameConfifFile;
+        }
 
         if (arg_print)
         {
@@ -236,7 +250,7 @@ int main(int argc, char *argv[])
 
             if (kill(pid, sig_send))
             {
-                fprintf(stderr, "<%s:%d> Error kill(pid=%u, sig=%u): %s\n", __func__, __LINE__, pid, sig_send, strerror(errno));
+                fprintf(stderr, "<%s:%d> Error kill(pid=%u, %s): %s\n", __func__, __LINE__, pid, strsignal(sig_send), strerror(errno));
                 return 1;
             }
 

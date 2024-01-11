@@ -155,13 +155,13 @@ public:
 
     int MaxAcceptConnections;
     int MaxConnectionPerThr;
-    int MaxWorkConnPerThr = INT_MAX;
+    int MaxWorkConnPerThr;
 
-    char BalancedLoad;
+    char BalancedWorkThreads;
 
-    unsigned int NumWorkThreads;
-    unsigned int NumParseReqThreads;
-    unsigned int MaxCgiProc;
+    int NumWorkThreads;
+    int NumParseReqThreads;
+    int MaxCgiProc;
 
     unsigned int MaxRanges;
     long int ClientMaxBodySize;
@@ -362,6 +362,7 @@ class EventHandlerClass
     int stat_work;
     int cgi_work;
     int close_thr;
+    unsigned long num_request;
 
     Connect *work_list_start;
     Connect *work_list_end;
@@ -435,6 +436,7 @@ public:
     void push_send_html(Connect *r);
     void push_ssl_shutdown(Connect *r);
     void close_event_handler();
+    long get_num_req();
 };
 //----------------------------------------------------------------------
 class LinkedList
@@ -538,6 +540,7 @@ void event_handler(int);
 void conn_decrement(int num_thr);
 int get_light_thread_number();
 void close_work_threads();
+void print_num_conn();
 //----------------------------------------------------------------------
 int set_max_fd(int max_open_fd);
 //----------------------------------------------------------------------
