@@ -987,7 +987,7 @@ printf("<%s:%d> +++++ worker thread %d run +++++\n", __func__, __LINE__, n_thr);
 #endif
         if (event_handler_cl[n_thr].snd_buf)
             delete [] event_handler_cl[n_thr].snd_buf;
-    //print_err("<%s:%d> ***** exit thread %d *****\n", __func__, __LINE__, n_thr);
+    print_err("<%s:%d> ***** exit thread %d *****\n", __func__, __LINE__, n_thr);
 }
 //======================================================================
 int get_light_thread_number()

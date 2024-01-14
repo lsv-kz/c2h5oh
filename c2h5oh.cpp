@@ -357,8 +357,11 @@ int main_proc()
     shutdown(sockServer, SHUT_RDWR);
     close(sockServer);
 
-    SSL_CTX_free(conf->ctx);
-    cleanup_openssl();
+    if (conf->Protocol == HTTPS)
+    {
+        SSL_CTX_free(conf->ctx);
+        cleanup_openssl();
+    }
 
     if (restartServer == 0)
         fprintf(stderr, "<%s> ***** Close *****\n", __func__);

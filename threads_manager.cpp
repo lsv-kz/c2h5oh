@@ -5,7 +5,7 @@ using namespace std;
 //======================================================================
 static mutex mtx_conn;
 static condition_variable cond_close_conn;
-static int num_conn = 0;
+static int num_conn;
 //======================================================================
 void start_conn()
 {
@@ -160,6 +160,7 @@ void list_init();
 //======================================================================
 void manager(int sockServer)
 {
+    num_conn = 0;
     list_init();
     //------------------------------------------------------------------
     if (chdir(conf->DocumentRoot.c_str()))
