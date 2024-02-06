@@ -23,7 +23,6 @@ static int startServer = 0, restartServer = 1;
 //======================================================================
 static void signal_handler(int signo)
 {
-    print_num_conn();
     if (signo == SIGINT)
     {
         print_err("<main> ####### SIGINT #######\n");

@@ -5,11 +5,53 @@ using namespace std;
 //======================================================================
 static mutex mtx_conn;
 static condition_variable cond_close_conn;
+
 static int num_conn;
+static int *conn_count;
 //======================================================================
-void start_conn()
+int get_light_thread_number()
+{
+    int n_thr = 0, n_conn;
+mtx_conn.lock();
+    if (conf->BalancedWorkThreads == 'y')
+    {
+        n_conn = conn_count[0];
+        for (int i = 1; i < conf->NumWorkThreads; ++i)
+        {
+            if (n_conn > conn_count[i])
+            {
+                n_thr = i;
+                n_conn = conn_count[i];
+            }
+        }
+
+        if (conn_count[n_thr] >= conf->MaxConnectionPerThr)
+        {
+            print_err("<%s:%d> !!!!!\n", __func__, __LINE__);
+            n_thr = -1;
+        }
+    }
+    else
+    {
+        n_thr = -1;
+        for (int i = 0; i < conf->NumWorkThreads; ++i)
+        {
+            if (conn_count[i] < conf->MaxConnectionPerThr)
+            {
+                n_thr = i;
+                break;
+            }
+        }
+    }
+
+mtx_conn.unlock();
+    return n_thr;
+}
+//======================================================================
+void start_conn(int n)
 {
 mtx_conn.lock();
+    conn_count[n]++;
     ++num_conn;
 mtx_conn.unlock();
 }
@@ -41,11 +83,11 @@ void close_connect(Connect *req)
 
     shutdown(req->clientSocket, SHUT_RDWR);
     close(req->clientSocket);
-    int ret = req->numThr;
+    int n = req->numThr;
     delete req;
-    conn_decrement(ret);
 
 mtx_conn.lock();
+    conn_count[n]--;
     --num_conn;
 mtx_conn.unlock();
     cond_close_conn.notify_all();
@@ -78,7 +120,8 @@ void end_response(Connect *r)
             #if defined(LINUX_)
                 int optval = 0;
                 setsockopt(r->clientSocket, SOL_TCP, TCP_CORK, &optval, sizeof(optval));
-            #elif defined(FREEBSD_)
+            //#elif defined(FREEBSD_)
+            #else
                 int optval = 0;
                 setsockopt(r->clientSocket, IPPROTO_TCP, TCP_NOPUSH, &optval, sizeof(optval));
             #endif
@@ -135,7 +178,8 @@ void end_response(Connect *r)
         #if defined(LINUX_)
             int optval = 0;
             setsockopt(r->clientSocket, SOL_TCP, TCP_CORK, &optval, sizeof(optval));
-        #elif defined(FREEBSD_)
+        //#elif defined(FREEBSD_)
+        #else
             int optval = 0;
             setsockopt(r->clientSocket, IPPROTO_TCP, TCP_NOPUSH, &optval, sizeof(optval));
         #endif
@@ -173,6 +217,16 @@ void manager(int sockServer)
     {
         exit(1);
     }
+    
+    conn_count = new(nothrow) int [conf->NumWorkThreads];
+    if (!conn_count)
+    {
+        print_err("<%s:%d> Error create array conn_count: %s\n", __func__, __LINE__, strerror(errno));
+        event_handler_cl_delete();
+        exit(1);
+    }
+
+    memset(conn_count, 0, sizeof(int) * conf->NumWorkThreads);
     //------------------------------------------------------------------
     int n = 0;
     while (n < conf->NumParseReqThreads)
@@ -242,7 +296,7 @@ void manager(int sockServer)
         if (clientSocket == -1)
         {
             print_err("<%s:%d>  Error accept(): %s\n", __func__, __LINE__, strerror(errno));
-            if ((errno == EINTR) || (errno == EMFILE))
+            if ((errno == EINTR) || (errno == EMFILE) || (errno == ENFILE))
                 continue;
             break;
         }
@@ -323,7 +377,7 @@ void manager(int sockServer)
             req->operation = READ_REQUEST;
         }
 
-        start_conn();
+        start_conn(req->numThr);
         push_pollin_list(req);
     }
 
@@ -333,9 +387,9 @@ void manager(int sockServer)
         work_thr[i].join();
     }
 
-    if (work_thr)
-        delete [] work_thr;
+    delete [] work_thr;
     event_handler_cl_delete();
+    delete [] conn_count;
 
     print_err("<%s:%d> all_conn=%lu, all_req=%lu; open_conn=%d\n",
                     __func__, __LINE__, allConn, get_all_request(), num_conn);

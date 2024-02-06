@@ -7,17 +7,15 @@
 #endif
 
 using namespace std;
-
-mutex mtx_;
-
-int create_multipart_head(Connect *req);
 //======================================================================
-static int *conn_count;
+int create_multipart_head(Connect *req);
+
 static EventHandlerClass *event_handler_cl;
 //======================================================================
 void EventHandlerClass::init(int n)
 {
     num_thr = n;
+    num_request = 0;
     close_thr = num_wait = num_work = stat_work = cgi_work = 0;
     work_list_start = work_list_end = static_cont_wait_list_start = static_cont_wait_list_end = NULL;
     cgi_wait_list_start = cgi_wait_list_end = NULL;
@@ -129,6 +127,7 @@ int EventHandlerClass::set_poll()
             if ((t - r->sock_timer) >= r->timeout)
             {
                 print_err(r, "<%s:%d> Timeout=%ld\n", __func__, __LINE__, t - r->sock_timer);
+                del_from_list(r);
                 if (r->operation == DYN_PAGE)
                 {
                     if ((r->cgi_type == CGI) || (r->cgi_type == PHPCGI))
@@ -148,18 +147,30 @@ int EventHandlerClass::set_poll()
                         r->req_hd.iReferer = MAX_HEADERS - 1;
                         r->reqHdValue[r->req_hd.iReferer] = "Timeout";
                     }
+
+                    end_response(r);
                 }
                 else
                 {
-                    if (r->operation > READ_REQUEST)
+                    if ((r->operation == SSL_ACCEPT) || 
+                        (r->operation == SSL_SHUTDOWN))
+                    {
+                        close_connect(r);
+                        //end_response(r);
+                    }
+                    else if (r->operation > READ_REQUEST)
                     {
                         r->req_hd.iReferer = MAX_HEADERS - 1;
                         r->reqHdValue[r->req_hd.iReferer] = "Timeout";
+                        r->err = -1;
+                        end_response(r);
                     }
-                    r->err = -1;
+                    else
+                    {
+                        r->err = -1;
+                        end_response(r);
+                    }
                 }
-                del_from_list(r);
-                end_response(r);
             }
             else
             {
@@ -334,14 +345,25 @@ int EventHandlerClass::poll_worker()
                 else
                 {
                     print_err(r, "<%s:%d> Error: events=0x%x(0x%x)\n", __func__, __LINE__, poll_fd[i].events, poll_fd[i].revents);
-                    if (r->operation > READ_REQUEST)
+                    del_from_list(r);
+                    if ((r->operation == SSL_ACCEPT) || 
+                        (r->operation == SSL_SHUTDOWN))
+                    {
+                        close_connect(r);
+                        //end_response(r);
+                    }
+                    else if (r->operation > READ_REQUEST)
                     {
                         r->req_hd.iReferer = MAX_HEADERS - 1;
                         r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
+                        r->err = -1;
+                        end_response(r);
                     }
-                    r->err = -1;
-                    del_from_list(r);
-                    end_response(r);
+                    else
+                    {
+                        r->err = -1;
+                        end_response(r);
+                    }
                 }
             }
 
@@ -990,54 +1012,6 @@ printf("<%s:%d> +++++ worker thread %d run +++++\n", __func__, __LINE__, n_thr);
     print_err("<%s:%d> ***** exit thread %d *****\n", __func__, __LINE__, n_thr);
 }
 //======================================================================
-int get_light_thread_number()
-{
-    int n_thr = 0, n_conn;
-mtx_.lock();
-    if (conf->BalancedWorkThreads == 'y')
-    {
-        n_conn = conn_count[0];
-        for (int i = 1; i < conf->NumWorkThreads; ++i)
-        {
-            if (n_conn > conn_count[i])
-            {
-                n_thr = i;
-                n_conn = conn_count[i];
-            }
-        }
-
-        if (conn_count[n_thr] >= conf->MaxConnectionPerThr)
-        {
-            print_err("<%s:%d> !!!!!\n", __func__, __LINE__);
-            n_thr = -1;
-        }
-    }
-    else
-    {
-        n_thr = -1;
-        for (int i = 0; i < conf->NumWorkThreads; ++i)
-        {
-            if (conn_count[i] < conf->MaxConnectionPerThr)
-            {
-                n_thr = i;
-                break;
-            }
-        }
-    }
-
-    if (n_thr >= 0)
-        conn_count[n_thr]++;
-mtx_.unlock();
-    return n_thr;
-}
-//======================================================================
-void conn_decrement(int n)
-{
-mtx_.lock();
-    conn_count[n]--;
-mtx_.unlock();
-}
-//======================================================================
 void push_pollin_list(Connect *r)
 {
     event_handler_cl[r->numThr].push_pollin_list(r);
@@ -1068,16 +1042,6 @@ void push_ssl_shutdown(Connect *r)
     event_handler_cl[r->numThr].push_ssl_shutdown(r);
 }
 //======================================================================
-void print_num_conn()
-{
-mtx_.lock();
-    for (int i = 0; i < conf->NumWorkThreads; ++i)
-    {
-        fprintf(stderr, " <%u> {connections: %d, requests: %ld}\n", i, conn_count[i], event_handler_cl[i].get_num_req());
-    }
-mtx_.unlock();
-}
-//======================================================================
 int event_handler_cl_new()
 {
     event_handler_cl = new(nothrow) EventHandlerClass [conf->NumWorkThreads];
@@ -1087,16 +1051,6 @@ int event_handler_cl_new()
         return -1;
     }
 
-    conn_count = new(nothrow) int [conf->NumWorkThreads];
-    if (!conn_count)
-    {
-        print_err("<%s:%d> Error create array conn_count: %s\n", __func__, __LINE__, strerror(errno));
-        delete [] event_handler_cl;
-        return -1;
-    }
-
-    memset(conn_count, 0, sizeof(int) * conf->NumWorkThreads);
-
     return 0;
 }
 //======================================================================
@@ -1104,8 +1058,6 @@ void event_handler_cl_delete()
 {
     if (event_handler_cl)
         delete [] event_handler_cl;
-    if (conn_count)
-        delete [] conn_count;
 }
 //======================================================================
 void close_work_threads()

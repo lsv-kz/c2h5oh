@@ -750,7 +750,7 @@ int EventHandlerClass::cgi_err(Connect *r)
 /*void EventHandlerClass::cgi_add_work_list()
 {
 mtx_cgi.lock();
-    if ((cgi_work < (int)conf->MaxCgiProc) && cgi_wait_list_end)
+    if ((cgi_work < conf->MaxCgiProc) && cgi_wait_list_end)
     {
         int n_max = conf->MaxCgiProc - cgi_work;
         Connect *r = cgi_wait_list_end;
@@ -760,7 +760,6 @@ mtx_cgi.lock();
             cgi_wait_list_end = r->prev;
             if (cgi_wait_list_end == NULL)
                 cgi_wait_list_start = NULL;
-            --cgi_wait;
             //--------------------------
             if ((r->cgi_type == CGI) || (r->cgi_type == PHPCGI))
             {
@@ -771,7 +770,6 @@ mtx_cgi.lock();
             else if ((r->cgi_type == PHPFPM) || (r->cgi_type == FASTCGI))
             {
                 r->cgi.op.fcgi = FASTCGI_CONNECT;
-                r->fcgi.all_read = 0;
             }
             else if (r->cgi_type == SCGI)
             {
@@ -822,7 +820,6 @@ mtx_cgi.unlock();
         cgi_wait_list_end = r->prev;
         if (cgi_wait_list_end == NULL)
             cgi_wait_list_start = NULL;
-        //--cgi_wait;
     mtx_cgi.unlock();
         //--------------------------
         if ((r->cgi_type == CGI) || (r->cgi_type == PHPCGI))

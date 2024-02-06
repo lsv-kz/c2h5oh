@@ -228,7 +228,7 @@ public:
     PROTOCOL Protocol;
 
     int numThr;
-    unsigned int numConn, numReq;
+    unsigned long numConn, numReq;
     int       clientSocket;
     int       err;
     time_t    sock_timer;
@@ -537,10 +537,7 @@ void push_send_multipart(Connect *req);
 void push_send_html(Connect *req);
 void push_ssl_shutdown(Connect *r);
 void event_handler(int);
-void conn_decrement(int num_thr);
-int get_light_thread_number();
 void close_work_threads();
-void print_num_conn();
 //----------------------------------------------------------------------
 int set_max_fd(int max_open_fd);
 //----------------------------------------------------------------------

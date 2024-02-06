@@ -82,7 +82,7 @@ void parse_request_thread()
         req = conn_list.pop_resp_list();
         if (!req)
         {
-            //print_err("<%s:%d>  Error pop_resp_list()=NULL\n", __func__, __LINE__);
+            //print_err("<%s:%d> Error pop_resp_list()=NULL\n", __func__, __LINE__);
             return;
         }
         //--------------------------------------------------------------
@@ -91,7 +91,7 @@ void parse_request_thread()
             int ret = parse_headers(req, req->reqHdName[i], i);
             if (ret < 0)
             {
-                print_err(req, "<%s:%d>  Error parse_headers(): %d\n", __func__, __LINE__, ret);
+                print_err(req, "<%s:%d> Error parse_headers(): %d\n", __func__, __LINE__, ret);
                 goto end;
             }
         }
@@ -101,7 +101,8 @@ void parse_request_thread()
         #if defined(LINUX_)
             int optval = 1;
             setsockopt(req->clientSocket, SOL_TCP, TCP_CORK, &optval, sizeof(optval));
-        #elif defined(FREEBSD_)
+        //#elif defined(FREEBSD_)
+        #else
             int optval = 1;
             setsockopt(req->clientSocket, IPPROTO_TCP, TCP_NOPUSH, &optval, sizeof(optval));
         #endif

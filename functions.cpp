@@ -9,9 +9,8 @@ string get_time()
     char s[40];
     time_t now = time(NULL);
 
-    //gmtime_r(&now, &t);
-    localtime_r(&now, &t);
-    strftime(s, sizeof(s), "%a, %d %b %Y %H:%M:%S %z", &t);
+    gmtime_r(&now, &t);
+    strftime(s, sizeof(s), "%a, %d %b %Y %H:%M:%S %Z", &t);
     return s;
 }
 //======================================================================
@@ -20,9 +19,8 @@ string get_time(time_t now)
     struct tm t;
     char s[40];
 
-    //gmtime_r(&now, &t);
-    localtime_r(&now, &t);
-    strftime(s, sizeof(s), "%a, %d %b %Y %H:%M:%S %z", &t);
+    gmtime_r(&now, &t);
+    strftime(s, sizeof(s), "%a, %d %b %Y %H:%M:%S %Z", &t);
     return s;
 }
 //======================================================================
@@ -32,9 +30,8 @@ string log_time()
     char s[40];
     time_t now = time(NULL);
 
-    //gmtime_r(&now, &t);
     localtime_r(&now, &t);
-    strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S  %z", &t);
+    strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S  %Z", &t);
     return s;
 }
 //======================================================================
@@ -43,9 +40,8 @@ string log_time(time_t now)
     struct tm t;
     char s[40];
 
-    //gmtime_r(&now, &t);
     localtime_r(&now, &t);
-    strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S  %z", &t);
+    strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S  %Z", &t);
     return s;
 }
 //======================================================================
