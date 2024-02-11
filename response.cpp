@@ -4,23 +4,36 @@ using namespace std;
 //======================================================================
 static LinkedList conn_list;
 //----------------------------------------------------------------------
-LinkedList::~LinkedList() {}
+void LinkedList::init()
+{
+    print_err("<%s:%d> === init object ===\n", __func__, __LINE__);
+    list_start = list_end = NULL;
+    all_req = 0;
+    thr_exit = 0;
+}
+//----------------------------------------------------------------------
+LinkedList::~LinkedList()
+{
+    printf("<%s:%d> ********\n", __func__, __LINE__);
+}
 //----------------------------------------------------------------------
 void LinkedList::push_resp_list(Connect *req)
 {
-mtx_list.lock();
-    req->next = NULL;
-    req->prev = list_end;
-    if (list_start)
     {
-        list_end->next = req;
-        list_end = req;
-    }
-    else
-        list_start = list_end = req;
+    lock_guard<mutex> lk(mtx_list);
+        req->next = NULL;
+        req->prev = list_end;
+        if (list_start)
+        {
+            list_end->next = req;
+            list_end = req;
+        }
+        else
+            list_start = list_end = req;
 
-    ++all_req;
-mtx_list.unlock();
+        ++all_req;
+    }
+
     cond_list.notify_one();
 }
 //----------------------------------------------------------------------

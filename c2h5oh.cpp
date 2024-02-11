@@ -2,7 +2,7 @@
 
 using namespace std;
 
-static int sockServer;
+static int sockServer = -1;
 int Connect::serverSocket;
 
 int read_conf_file(const char *path_conf);
@@ -26,6 +26,13 @@ static void signal_handler(int signo)
     if (signo == SIGINT)
     {
         print_err("<main> ####### SIGINT #######\n");
+        if (sockServer > 0)
+        {
+            shutdown(sockServer, SHUT_RDWR);
+            close(sockServer);
+            sockServer = -1;
+        }
+        restartServer = 0;
     }
     else if (signo == SIGSEGV)
     {
@@ -36,11 +43,23 @@ static void signal_handler(int signo)
     {
         fprintf(stderr, "<%s> ####### SIGUSR1 #######\n", __func__);
         restartServer = 1;
+        if (sockServer > 0)
+        {
+            shutdown(sockServer, SHUT_RDWR);
+            close(sockServer);
+            sockServer = -1;
+        }
     }
     else if (signo == SIGUSR2)
     {
         fprintf(stderr, "<%s> ####### SIGUSR2 #######\n", __func__);
         restartServer = 0;
+        if (sockServer > 0)
+        {
+            shutdown(sockServer, SHUT_RDWR);
+            close(sockServer);
+            sockServer = -1;
+        }
     }
     else
         fprintf(stderr, "<%s:%d> ? signo=%d (%s)\n", __func__, __LINE__, signo, strsignal(signo));
@@ -296,6 +315,12 @@ int main(int argc, char *argv[])
                 break;
             }
 
+            if (signal(SIGSEGV, signal_handler) == SIG_ERR)
+            {
+                fprintf(stderr, "<%s:%d> Error signal(SIGSEGV): %s\n", __func__, __LINE__, strerror(errno));
+                break;
+            } 
+
             if (signal(SIGUSR1, signal_handler) == SIG_ERR)
             {
                 fprintf(stderr, "<%s:%d> Error signal(SIGUSR1): %s\n", __func__, __LINE__, strerror(errno));
@@ -353,8 +378,12 @@ int main_proc()
     manager(sockServer);
     close_logs();
 
-    shutdown(sockServer, SHUT_RDWR);
-    close(sockServer);
+    if (sockServer > 0)
+    {
+        shutdown(sockServer, SHUT_RDWR);
+        close(sockServer);
+        sockServer = -1;
+    }
 
     if (conf->Protocol == HTTPS)
     {
