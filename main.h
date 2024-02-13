@@ -25,6 +25,7 @@
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <poll.h>
+#include <sys/select.h>
 #include <sys/ioctl.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -367,8 +368,8 @@ class EventHandlerClass
     Connect *work_list_start;
     Connect *work_list_end;
 
-    Connect *static_cont_wait_list_start;
-    Connect *static_cont_wait_list_end;
+    Connect *wait_list_start;
+    Connect *wait_list_end;
 
     Connect *cgi_wait_list_start;
     Connect *cgi_wait_list_end;
@@ -416,6 +417,8 @@ class EventHandlerClass
     int scgi_err(Connect *r);
 
 public:
+
+    ~EventHandlerClass();
 
     struct pollfd *poll_fd;
     char *snd_buf;

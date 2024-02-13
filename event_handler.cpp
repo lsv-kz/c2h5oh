@@ -12,12 +12,17 @@ int create_multipart_head(Connect *req);
 
 static EventHandlerClass *event_handler_cl;
 //======================================================================
+EventHandlerClass::~EventHandlerClass()
+{
+    printf("<%s:%d> **** %d ****\n", __func__, __LINE__, num_thr);
+}
+//----------------------------------------------------------------------
 void EventHandlerClass::init(int n)
 {
     num_thr = n;
     num_request = 0;
     close_thr = num_wait = num_work = stat_work = cgi_work = 0;
-    work_list_start = work_list_end = static_cont_wait_list_start = static_cont_wait_list_end = NULL;
+    work_list_start = work_list_end = wait_list_start = wait_list_end = NULL;
     cgi_wait_list_start = cgi_wait_list_end = NULL;
 }
 //----------------------------------------------------------------------
@@ -92,16 +97,16 @@ void EventHandlerClass::del_from_list(Connect *r)
 void EventHandlerClass::add_work_list()
 {
 mtx_thr.lock();
-    if (static_cont_wait_list_start)
+    if (wait_list_start)
     {
         if (work_list_end)
-            work_list_end->next = static_cont_wait_list_start;
+            work_list_end->next = wait_list_start;
         else
-            work_list_start = static_cont_wait_list_start;
+            work_list_start = wait_list_start;
 
-        static_cont_wait_list_start->prev = work_list_end;
-        work_list_end = static_cont_wait_list_end;
-        static_cont_wait_list_start = static_cont_wait_list_end = NULL;
+        wait_list_start->prev = work_list_end;
+        work_list_end = wait_list_end;
+        wait_list_start = wait_list_end = NULL;
     }
 mtx_thr.unlock();
 }
@@ -376,13 +381,15 @@ int EventHandlerClass::poll_worker()
 //----------------------------------------------------------------------
 int EventHandlerClass::wait_conn()
 {
-unique_lock<mutex> lk(mtx_thr);
-    while ((!work_list_start) && (!static_cont_wait_list_start) && (!cgi_wait_list_start) && (!close_thr))
     {
-        cond_thr.wait(lk);
+    unique_lock<mutex> lk(mtx_thr);
+        while ((!work_list_start) && (!wait_list_start) && (!cgi_wait_list_start) && (!close_thr))
+        {
+            cond_thr.wait(lk);
+        }
     }
 
-    if ((close_thr) && (!work_list_start) && (!static_cont_wait_list_start) && (!cgi_wait_list_start))
+    if (close_thr)
         return 1;
     return 0;
 }
@@ -410,14 +417,14 @@ void EventHandlerClass::add_wait_list(Connect *r)
     r->sock_timer = 0;
     r->next = NULL;
 mtx_thr.lock();
-    r->prev = static_cont_wait_list_end;
-    if (static_cont_wait_list_start)
+    r->prev = wait_list_end;
+    if (wait_list_start)
     {
-        static_cont_wait_list_end->next = r;
-        static_cont_wait_list_end = r;
+        wait_list_end->next = r;
+        wait_list_end = r;
     }
     else
-        static_cont_wait_list_start = static_cont_wait_list_end = r;
+        wait_list_start = wait_list_end = r;
 mtx_thr.unlock();
     cond_thr.notify_one();
 }

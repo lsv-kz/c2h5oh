@@ -12,14 +12,13 @@ void free_fcgi_list();
 int set_uid();
 void manager(int);
 
-static int main_proc();
-
 static string pidFile;
 const char *nameConfifFile = "/c2h5oh.conf";
 static string confPath;
 static string cwd;
+static string fileName;
 
-static int startServer = 0, restartServer = 1;
+static int restartServer = 1;
 //======================================================================
 static void signal_handler(int signo)
 {
@@ -183,7 +182,11 @@ int get_cwd(string& s)
 //======================================================================
 int main(int argc, char *argv[])
 {
+    fileName = argv[0];
     signal(SIGPIPE, SIG_IGN);
+
+    pid_t pid;
+    while ((pid = waitpid(-1, NULL, WNOHANG)) != -1);
 
     if (get_cwd(cwd))
     {
@@ -243,8 +246,8 @@ int main(int argc, char *argv[])
                 sig_send = SIGUSR1;
             else if (!strcmp(sig, "close"))
                 sig_send = SIGUSR2;
-            else if (!strcmp(sig, "abort"))
-                sig_send = SIGTERM;
+            //else if (!strcmp(sig, "abort"))
+            //    sig_send = SIGTERM;
             else
             {
                 fprintf(stderr, "<%d> ? option -s: %s\n", __LINE__, sig);
@@ -262,7 +265,6 @@ int main(int argc, char *argv[])
                 return 1;
             }
 
-            pid_t pid;
             fscanf(fpid, "%u", &pid);
             fclose(fpid);
 
@@ -276,81 +278,62 @@ int main(int argc, char *argv[])
         }
     }
 
-    while (restartServer)
+    restartServer = 0;
+
+    if (read_conf_file(confPath.c_str()))
+        return 1;
+
+    set_uid();
+    //------------------------------------------------------------------
+    create_logfiles(conf->LogPath);
+
+    sockServer = create_server_socket(conf);
+    if (sockServer == -1)
     {
-        restartServer = 0;
-
-        if (read_conf_file(confPath.c_str()))
-            return 1;
-
-        set_uid();
-        //--------------------------------------------------------------
-        sockServer = create_server_socket(conf);
-        if (sockServer == -1)
-        {
-            fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__,
-                        conf->ServerAddr.c_str(), conf->ServerPort.c_str());
-            break;
-        }
-
-        Connect::serverSocket = sockServer;
-        //--------------------------------------------------------------
-        if (startServer == 0)
-        {
-            startServer = 1;
-            pidFile = conf->PidFilePath + "/pid.txt";
-            FILE *fpid = fopen(pidFile.c_str(), "w");
-            if (!fpid)
-            {
-                fprintf(stderr, "<%s:%d> Error open PidFile(%s): %s\n", __func__, __LINE__, pidFile.c_str(), strerror(errno));
-                return 1;
-            }
-
-            fprintf(fpid, "%u\n", getpid());
-            fclose(fpid);
-            //----------------------------------------------------------
-            if (signal(SIGINT, signal_handler) == SIG_ERR)
-            {
-                fprintf(stderr, "<%s:%d> Error signal(SIGINT): %s\n", __func__, __LINE__, strerror(errno));
-                break;
-            }
-
-            if (signal(SIGSEGV, signal_handler) == SIG_ERR)
-            {
-                fprintf(stderr, "<%s:%d> Error signal(SIGSEGV): %s\n", __func__, __LINE__, strerror(errno));
-                break;
-            } 
-
-            if (signal(SIGUSR1, signal_handler) == SIG_ERR)
-            {
-                fprintf(stderr, "<%s:%d> Error signal(SIGUSR1): %s\n", __func__, __LINE__, strerror(errno));
-                break;
-            }
-
-            if (signal(SIGUSR2, signal_handler) == SIG_ERR)
-            {
-                fprintf(stderr, "<%s:%d> Error signal(SIGUSR2): %s\n", __func__, __LINE__, strerror(errno));
-                break;
-            }
-        }
-        //--------------------------------------------------------------
-        create_logfiles(conf->LogPath);
-        //--------------------------------------------------------------
-        int ret = main_proc();
-        close_logs();
-        if (ret)
-            break;
+        fprintf(stderr, "<%s:%d> Error: create_server_socket(%s:%s)\n", __func__, __LINE__,
+                    conf->ServerAddr.c_str(), conf->ServerPort.c_str());
+        return 1;
     }
 
-    if (startServer == 1)
-        remove(pidFile.c_str());
-    return 0;
-}
-//======================================================================
-int main_proc()
-{
-    pid_t pid = getpid();
+    Connect::serverSocket = sockServer;
     //------------------------------------------------------------------
+    pidFile = conf->PidFilePath + "/pid.txt";
+    FILE *fpid = fopen(pidFile.c_str(), "w");
+    if (!fpid)
+    {
+        fprintf(stderr, "<%s:%d> Error open PidFile(%s): %s\n", __func__, __LINE__, pidFile.c_str(), strerror(errno));
+        return 1;
+    }
+
+    fprintf(fpid, "%u\n", getpid());
+    fclose(fpid);
+    //------------------------------------------------------------------
+    if (signal(SIGINT, signal_handler) == SIG_ERR)
+    {
+        fprintf(stderr, "<%s:%d> Error signal(SIGINT): %s\n", __func__, __LINE__, strerror(errno));
+        return 1;
+    }
+
+    if (signal(SIGSEGV, signal_handler) == SIG_ERR)
+    {
+        fprintf(stderr, "<%s:%d> Error signal(SIGSEGV): %s\n", __func__, __LINE__, strerror(errno));
+        return 1;
+    } 
+
+    if (signal(SIGUSR1, signal_handler) == SIG_ERR)
+    {
+        fprintf(stderr, "<%s:%d> Error signal(SIGUSR1): %s\n", __func__, __LINE__, strerror(errno));
+        return 1;
+    }
+
+    if (signal(SIGUSR2, signal_handler) == SIG_ERR)
+    {
+        fprintf(stderr, "<%s:%d> Error signal(SIGUSR2): %s\n", __func__, __LINE__, strerror(errno));
+        return 1;
+    }
+    //------------------------------------------------------------------
+    pid = getpid();
+
     cout << "\n[" << get_time().c_str() << "] - server \"" << conf->ServerSoftware.c_str()
          << "\" run, port: " << conf->ServerPort.c_str()
          << "\n   hardware_concurrency = " << thread::hardware_concurrency() << "\n";
@@ -376,7 +359,6 @@ int main_proc()
     }
     //------------------------------------------------------------------
     manager(sockServer);
-    close_logs();
 
     if (sockServer > 0)
     {
@@ -392,15 +374,19 @@ int main_proc()
     }
 
     if (restartServer == 0)
-        fprintf(stderr, "<%s> ***** Close *****\n", __func__);
+        print_err("<%s:%d> ***** Close *****\n", __func__, __LINE__);
     else
     {
-        fprintf(stderr, "<%s> ***** Reload *****\n\n", __func__);
+        print_err("<%s:%d> ***** Reload *****\n\n", __func__, __LINE__);
         if (chdir(cwd.c_str()))
         {
-            fprintf(stderr, "<%s:%d> Error chdir(%s): %s\n", __func__, __LINE__, cwd.c_str(), strerror(errno));
+            print_err("<%s:%d> Error chdir(%s): %s\n", __func__, __LINE__, cwd.c_str(), strerror(errno));
             exit(EXIT_FAILURE);
         }
+
+        execl(fileName.c_str(), fileName.c_str(), NULL);
+        print_err("<%s:%d> Error execl(): %s\n", __func__, __LINE__, strerror(errno));
+        exit(1);
     }
 
     return 0;

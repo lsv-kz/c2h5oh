@@ -410,7 +410,7 @@ int prepare_response(Connect *req)
     if (req->reqMethod == M_OPTIONS)
         return options(req);
     //------------------------------------------------------------------
-    req->fd = open(path.c_str(), O_RDONLY);
+    req->fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
     if (req->fd == -1)
     {
         if (errno == EACCES)

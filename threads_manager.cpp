@@ -1,5 +1,4 @@
 #include "main.h"
-#include <sys/select.h>
 
 using namespace std;
 //======================================================================
@@ -194,7 +193,6 @@ void end_response(Connect *r)
     }
 }
 //======================================================================
-unsigned long allConn = 0;
 unsigned long get_all_request();
 Connect *create_req();
 int event_handler_cl_new();
@@ -204,6 +202,7 @@ void list_init();
 //======================================================================
 void manager(int sockServer)
 {
+    unsigned long allConn = 0;
     num_conn = 0;
     list_init();
     //------------------------------------------------------------------
@@ -310,9 +309,33 @@ void manager(int sockServer)
             continue;
         }
 
-        int opt = 1;
-        ioctl(clientSocket, FIONBIO, &opt);
+        int flags = 1;
+        if (ioctl(clientSocket, FIONBIO, &flags) == -1)
+        {
+            print_err("<%s:%d> Error ioctl(FIONBIO, 1): %s\n", __func__, __LINE__, strerror(errno));
+            break;
+        }
 
+        if (ioctl(clientSocket, FIOCLEX) == -1)
+        {
+            print_err("<%s:%d> Error ioctl(FIOCLEX): %s\n", __func__, __LINE__, strerror(errno));
+            break;
+        }
+/*
+        flags = fcntl(clientSocket, F_GETFD);
+        if (flags == -1)
+        {
+            print_err("<%s:%d> Error fcntl(F_GETFD): %s\n", __func__, __LINE__, strerror(errno));
+            break;
+        }
+
+        flags |= FD_CLOEXEC;
+        if (fcntl(clientSocket, F_SETFD, flags) == -1)
+        {
+            print_err("<%s:%d> Error fcntl(F_SETFD, FD_CLOEXEC): %s\n", __func__, __LINE__, strerror(errno));
+            break;
+        }
+*/
         req->init();
         req->Time = time(NULL);
         req->numThr = get_light_thread_number();
@@ -344,7 +367,7 @@ void manager(int sockServer)
             print_err(req, "<%s:%d> Error getnameinfo()=%d: %s\n", __func__, __LINE__, err, gai_strerror(err));
             req->remoteAddr[0] = 0;
         }
-        
+
         if (req->Protocol == HTTPS)
         {
             req->tls.err = 0;

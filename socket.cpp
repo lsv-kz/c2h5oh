@@ -116,6 +116,22 @@ int create_fcgi_socket(Connect *r, const char *host)
                 print_err(r, "<%s:%d> Error fcntl(, F_SETFL, ): %s\n", __func__, __LINE__, strerror(errno));
         }
 
+        flags = fcntl(sockfd, F_GETFD);
+        if (flags == -1)
+        {
+            print_err("<%s:%d> Error fcntl(F_GETFD): %s\n", __func__, __LINE__, strerror(errno));
+            close(sockfd);
+            return -1;
+        }
+
+        flags |= FD_CLOEXEC;
+        if (fcntl(sockfd, F_SETFD, flags) == -1)
+        {
+            print_err("<%s:%d> Error fcntl(F_SETFD, FD_CLOEXEC): %s\n", __func__, __LINE__, strerror(errno));
+            close(sockfd);
+            return -1;
+        }
+
         if (connect(sockfd, (struct sockaddr *)(&sock_addr), sizeof(sock_addr)) != 0)
         {
             if (errno != EINPROGRESS)
@@ -151,6 +167,22 @@ int create_fcgi_socket(Connect *r, const char *host)
             flags |= O_NONBLOCK;
             if (fcntl(sockfd, F_SETFL, flags) == -1)
                 print_err(r, "<%s:%d> Error fcntl(, F_SETFL, ): %s\n", __func__, __LINE__, strerror(errno));
+        }
+
+        flags = fcntl(sockfd, F_GETFD);
+        if (flags == -1)
+        {
+            print_err("<%s:%d> Error fcntl(F_GETFD): %s\n", __func__, __LINE__, strerror(errno));
+            close(sockfd);
+            return -1;
+        }
+
+        flags |= FD_CLOEXEC;
+        if (fcntl(sockfd, F_SETFD, flags) == -1)
+        {
+            print_err("<%s:%d> Error fcntl(F_SETFD, FD_CLOEXEC): %s\n", __func__, __LINE__, strerror(errno));
+            close(sockfd);
+            return -1;
         }
 
         if (connect(sockfd, (struct sockaddr *) &sock_addr, SUN_LEN(&sock_addr)) == -1)

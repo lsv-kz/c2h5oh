@@ -229,6 +229,15 @@ int EventHandlerClass::cgi_create_proc(Connect *req)
         return -RS500;
     }
 
+    if (ioctl(cgi_serv[0], FIOCLEX) == -1)
+    {
+        print_err("<%s:%d> Error ioctl(FIOCLEX): %s\n", __func__, __LINE__, strerror(errno));
+        req->connKeepAlive = 0;
+        close(cgi_serv[0]);
+        close(cgi_serv[1]);
+        return -RS500;
+    }
+
     if (req->reqMethod == M_POST)
     {
         n = pipe(serv_cgi);
@@ -238,6 +247,18 @@ int EventHandlerClass::cgi_create_proc(Connect *req)
             req->connKeepAlive = 0;
             close(cgi_serv[0]);
             close(cgi_serv[1]);
+            return -RS500;
+        }
+
+        if (ioctl(serv_cgi[1], FIOCLEX) == -1)
+        {
+            print_err("<%s:%d> Error ioctl(FIOCLEX): %s\n", __func__, __LINE__, strerror(errno));
+            req->connKeepAlive = 0;
+            close(cgi_serv[0]);
+            close(cgi_serv[1]);
+            
+            close(serv_cgi[0]);
+            close(serv_cgi[1]);
             return -RS500;
         }
     }
