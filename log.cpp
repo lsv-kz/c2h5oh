@@ -69,7 +69,7 @@ void print_err(Connect *req, const char *format, ...)
     va_end(ap);
 
     String ss(256);
-    ss << "[" << log_time() << "]-[" << req->numConn << "/" << req->numReq << "] " << buf;
+    ss << "[" << log_time() << "] - [" << req->numConn << "/" << req->numReq << "] " << buf;
 
 mtxLog.lock();
     write(flog_err, ss.c_str(), ss.size());
@@ -96,7 +96,7 @@ void print_log(Connect *req)
             << "\"" << ((req->req_hd.iReferer >= 0) ? req->reqHdValue[req->req_hd.iReferer] : "-") << "\" "
             << "\"" << ((req->req_hd.iUserAgent >= 0) ? req->reqHdValue[req->req_hd.iUserAgent] : "-") << "\"\n";
     }
-//mtxLog.lock();
+mtxLog.lock();
     write(flog, ss.c_str(), ss.size());
-//mtxLog.unlock();
+mtxLog.unlock();
 }

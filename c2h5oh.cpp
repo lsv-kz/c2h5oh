@@ -16,7 +16,7 @@ static string pidFile;
 const char *nameConfifFile = "/c2h5oh.conf";
 static string confPath;
 static string cwd;
-static string fileName;
+static string myFileName;
 
 static int restartServer = 1;
 //======================================================================
@@ -24,7 +24,7 @@ static void signal_handler(int signo)
 {
     if (signo == SIGINT)
     {
-        print_err("<main> ####### SIGINT #######\n");
+        fprintf(stderr, "[%s] - <%s> ####### SIGINT #######\n", log_time().c_str(), __func__);
         if (sockServer > 0)
         {
             shutdown(sockServer, SHUT_RDWR);
@@ -35,12 +35,12 @@ static void signal_handler(int signo)
     }
     else if (signo == SIGSEGV)
     {
-        print_err("<main> ####### SIGSEGV #######\n");
+        fprintf(stderr, "[%s] - <%s> ####### SIGSEGV #######\n", log_time().c_str(), __func__);
         exit(1);
     }
     else if (signo == SIGUSR1)
     {
-        fprintf(stderr, "<%s> ####### SIGUSR1 #######\n", __func__);
+        fprintf(stderr, "[%s] - <%s> ####### SIGUSR1 #######\n", log_time().c_str(), __func__);
         restartServer = 1;
         if (sockServer > 0)
         {
@@ -51,7 +51,7 @@ static void signal_handler(int signo)
     }
     else if (signo == SIGUSR2)
     {
-        fprintf(stderr, "<%s> ####### SIGUSR2 #######\n", __func__);
+        fprintf(stderr, "[%s] - <%s> ####### SIGUSR2 #######\n", log_time().c_str(), __func__);
         restartServer = 0;
         if (sockServer > 0)
         {
@@ -61,7 +61,7 @@ static void signal_handler(int signo)
         }
     }
     else
-        fprintf(stderr, "<%s:%d> ? signo=%d (%s)\n", __func__, __LINE__, signo, strsignal(signo));
+        fprintf(stderr, "[%s] - <%s> ? signo=%d (%s)\n", log_time().c_str(), __func__, signo, strsignal(signo));
 }
 //======================================================================
 void print_help(const char *name)
@@ -182,7 +182,7 @@ int get_cwd(string& s)
 //======================================================================
 int main(int argc, char *argv[])
 {
-    fileName = argv[0];
+    myFileName = argv[0];
     signal(SIGPIPE, SIG_IGN);
 
     pid_t pid;
@@ -384,7 +384,7 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
 
-        execl(fileName.c_str(), fileName.c_str(), NULL);
+        execl(myFileName.c_str(), myFileName.c_str(), NULL);
         print_err("<%s:%d> Error execl(): %s\n", __func__, __LINE__, strerror(errno));
         exit(1);
     }
