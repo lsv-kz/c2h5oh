@@ -5,7 +5,7 @@ using namespace std;
 static mutex mtx_conn;
 static condition_variable cond_close_conn;
 
-static int num_conn;
+static int num_conn, close_server;
 static int *conn_count;
 //======================================================================
 int get_light_thread_number()
@@ -64,13 +64,15 @@ unique_lock<mutex> lk(mtx_conn);
     }
 }
 //======================================================================
-void is_maxconn()
+int is_maxconn()
 {
 unique_lock<mutex> lk(mtx_conn);
-    while (num_conn >= conf->MaxAcceptConnections)
+    while ((num_conn >= conf->MaxAcceptConnections) && (!close_server))
     {
         cond_close_conn.wait(lk);
     }
+
+    return close_server;
 }
 //======================================================================
 void close_connect(Connect *req)
@@ -203,7 +205,7 @@ void list_init();
 void manager(int sockServer)
 {
     unsigned long allConn = 0;
-    num_conn = 0;
+    num_conn = close_server = 0;
     list_init();
     //------------------------------------------------------------------
     if (chdir(conf->DocumentRoot.c_str()))
@@ -279,7 +281,8 @@ void manager(int sockServer)
         struct sockaddr_storage clientAddr;
         socklen_t addrSize = sizeof(struct sockaddr_storage);
 
-        is_maxconn();
+        if (is_maxconn())
+            break;
 
         FD_SET(sockServer, &readfds);
         int ret_sel = select(sockServer + 1, &readfds, NULL, NULL, NULL);
@@ -427,4 +430,14 @@ Connect *create_req(void)
     if (!req)
         print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
     return req;
+}
+//======================================================================
+void server_stop()
+{
+    {
+    lock_guard<mutex> lk(mtx_conn);
+        close_server = 1;
+    }
+
+    cond_close_conn.notify_all();
 }

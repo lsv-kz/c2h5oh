@@ -11,6 +11,7 @@ int get_size_sock_buf(int domain, int optname, int type, int protocol);
 void free_fcgi_list();
 int set_uid();
 void manager(int);
+void server_stop();
 
 static string pidFile;
 const char *nameConfifFile = "/c2h5oh.conf";
@@ -32,10 +33,19 @@ static void signal_handler(int signo)
             sockServer = -1;
         }
         restartServer = 0;
+        server_stop();
     }
     else if (signo == SIGSEGV)
     {
         fprintf(stderr, "[%s] - <%s> ####### SIGSEGV #######\n", log_time().c_str(), __func__);
+        if (sockServer > 0)
+        {
+            shutdown(sockServer, SHUT_RDWR);
+            close(sockServer);
+            sockServer = -1;
+        }
+        restartServer = 0;
+        server_stop();
         exit(1);
     }
     else if (signo == SIGUSR1)
@@ -48,6 +58,7 @@ static void signal_handler(int signo)
             close(sockServer);
             sockServer = -1;
         }
+        server_stop();
     }
     else if (signo == SIGUSR2)
     {
@@ -59,6 +70,7 @@ static void signal_handler(int signo)
             close(sockServer);
             sockServer = -1;
         }
+        server_stop();
     }
     else
         fprintf(stderr, "[%s] - <%s> ? signo=%d (%s)\n", log_time().c_str(), __func__, signo, strsignal(signo));
@@ -183,7 +195,12 @@ int get_cwd(string& s)
 int main(int argc, char *argv[])
 {
     myFileName = argv[0];
-    signal(SIGPIPE, SIG_IGN);
+
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+    {
+        fprintf(stderr, "<%s:%d> Error signal(SIGPIPE): %s\n", __func__, __LINE__, strerror(errno));
+        return 1;
+    }
 
     pid_t pid;
     while ((pid = waitpid(-1, NULL, WNOHANG)) != -1);
