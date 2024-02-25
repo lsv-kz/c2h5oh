@@ -38,15 +38,7 @@ static void signal_handler(int signo)
     else if (signo == SIGSEGV)
     {
         fprintf(stderr, "[%s] - <%s> ####### SIGSEGV #######\n", log_time().c_str(), __func__);
-        if (sockServer > 0)
-        {
-            shutdown(sockServer, SHUT_RDWR);
-            close(sockServer);
-            sockServer = -1;
-        }
-        restartServer = 0;
-        server_stop();
-        exit(1);
+        abort();
     }
     else if (signo == SIGUSR1)
     {
@@ -263,8 +255,8 @@ int main(int argc, char *argv[])
                 sig_send = SIGUSR1;
             else if (!strcmp(sig, "close"))
                 sig_send = SIGUSR2;
-            //else if (!strcmp(sig, "abort"))
-            //    sig_send = SIGTERM;
+            else if (!strcmp(sig, "abort"))
+                sig_send = SIGABRT;
             else
             {
                 fprintf(stderr, "<%d> ? option -s: %s\n", __LINE__, sig);
@@ -302,8 +294,6 @@ int main(int argc, char *argv[])
 
     set_uid();
     //------------------------------------------------------------------
-    create_logfiles(conf->LogPath);
-
     sockServer = create_server_socket(conf);
     if (sockServer == -1)
     {
@@ -313,6 +303,8 @@ int main(int argc, char *argv[])
     }
 
     Connect::serverSocket = sockServer;
+    //------------------------------------------------------------------
+    create_logfiles(conf->LogPath);
     //------------------------------------------------------------------
     pidFile = conf->PidFilePath + "/pid.txt";
     FILE *fpid = fopen(pidFile.c_str(), "w");

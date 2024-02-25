@@ -57,6 +57,22 @@ int create_server_socket(const Config *conf)
         }
     }
 
+    flags = fcntl(sockfd, F_GETFD);
+    if (flags == -1)
+    {
+        print_err("<%s:%d> Error fcntl(F_GETFD): %s\n", __func__, __LINE__, strerror(errno));
+        close(sockfd);
+        return -1;
+    }
+
+    flags |= FD_CLOEXEC;
+    if (fcntl(sockfd, F_SETFD, flags) == -1)
+    {
+        print_err("<%s:%d> Error fcntl(F_SETFD, FD_CLOEXEC): %s\n", __func__, __LINE__, strerror(errno));
+        close(sockfd);
+        return -1;
+    }
+
     if (listen(sockfd, conf->ListenBacklog) == -1)
     {
         fprintf(stderr, "Error listen(): %s\n", strerror(errno));
@@ -116,22 +132,6 @@ int create_fcgi_socket(Connect *r, const char *host)
                 print_err(r, "<%s:%d> Error fcntl(, F_SETFL, ): %s\n", __func__, __LINE__, strerror(errno));
         }
 
-        flags = fcntl(sockfd, F_GETFD);
-        if (flags == -1)
-        {
-            print_err("<%s:%d> Error fcntl(F_GETFD): %s\n", __func__, __LINE__, strerror(errno));
-            close(sockfd);
-            return -1;
-        }
-
-        flags |= FD_CLOEXEC;
-        if (fcntl(sockfd, F_SETFD, flags) == -1)
-        {
-            print_err("<%s:%d> Error fcntl(F_SETFD, FD_CLOEXEC): %s\n", __func__, __LINE__, strerror(errno));
-            close(sockfd);
-            return -1;
-        }
-
         if (connect(sockfd, (struct sockaddr *)(&sock_addr), sizeof(sock_addr)) != 0)
         {
             if (errno != EINPROGRESS)
@@ -169,22 +169,6 @@ int create_fcgi_socket(Connect *r, const char *host)
                 print_err(r, "<%s:%d> Error fcntl(, F_SETFL, ): %s\n", __func__, __LINE__, strerror(errno));
         }
 
-        flags = fcntl(sockfd, F_GETFD);
-        if (flags == -1)
-        {
-            print_err("<%s:%d> Error fcntl(F_GETFD): %s\n", __func__, __LINE__, strerror(errno));
-            close(sockfd);
-            return -1;
-        }
-
-        flags |= FD_CLOEXEC;
-        if (fcntl(sockfd, F_SETFD, flags) == -1)
-        {
-            print_err("<%s:%d> Error fcntl(F_SETFD, FD_CLOEXEC): %s\n", __func__, __LINE__, strerror(errno));
-            close(sockfd);
-            return -1;
-        }
-
         if (connect(sockfd, (struct sockaddr *) &sock_addr, SUN_LEN(&sock_addr)) == -1)
         {
             if (errno != EINPROGRESS)
@@ -198,6 +182,22 @@ int create_fcgi_socket(Connect *r, const char *host)
         }
         else
             r->io_status = WORK;
+    }
+
+    int flags = fcntl(sockfd, F_GETFD);
+    if (flags == -1)
+    {
+        print_err("<%s:%d> Error fcntl(F_GETFD): %s\n", __func__, __LINE__, strerror(errno));
+        close(sockfd);
+        return -1;
+    }
+
+    flags |= FD_CLOEXEC;
+    if (fcntl(sockfd, F_SETFD, flags) == -1)
+    {
+        print_err("<%s:%d> Error fcntl(F_SETFD, FD_CLOEXEC): %s\n", __func__, __LINE__, strerror(errno));
+        close(sockfd);
+        return -1;
     }
 
     return sockfd;

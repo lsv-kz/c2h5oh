@@ -19,21 +19,17 @@ LinkedList::~LinkedList()
 //----------------------------------------------------------------------
 void LinkedList::push_resp_list(Connect *req)
 {
+lock_guard<mutex> lk(mtx_list);
+    req->next = NULL;
+    req->prev = list_end;
+    if (list_start)
     {
-    lock_guard<mutex> lk(mtx_list);
-        req->next = NULL;
-        req->prev = list_end;
-        if (list_start)
-        {
-            list_end->next = req;
-            list_end = req;
-        }
-        else
-            list_start = list_end = req;
-
-        ++all_req;
+        list_end->next = req;
+        list_end = req;
     }
-
+    else
+        list_start = list_end = req;
+    ++all_req;
     cond_list.notify_one();
 }
 //----------------------------------------------------------------------
@@ -105,7 +101,8 @@ void parse_request_thread()
             if (ret < 0)
             {
                 print_err(req, "<%s:%d> Error parse_headers(): %d\n", __func__, __LINE__, ret);
-                goto end;
+                end_response(req);
+                continue;
             }
         }
     #ifdef TCP_CORK_
@@ -125,7 +122,8 @@ void parse_request_thread()
         if ((req->httpProt != HTTP10) && (req->httpProt != HTTP11))
         {
             req->err = -RS505;
-            goto end;
+            end_response(req);
+            continue;
         }
 
         if (req->numReq >= (unsigned int)conf->MaxRequestsPerClient || (req->httpProt == HTTP10))
@@ -145,7 +143,8 @@ void parse_request_thread()
         {
             print_err(req, "<%s:%d> Error: decode URI\n", __func__, __LINE__);
             req->err = -RS404;
-            goto end;
+            end_response(req);
+            continue;
         }
 
         if (clean_path(req->decodeUri) <= 0)
@@ -153,7 +152,8 @@ void parse_request_thread()
             print_err(req, "<%s:%d> Error URI=%s\n", __func__, __LINE__, req->decodeUri);
             req->lenDecodeUri = strlen(req->decodeUri);
             req->err = -RS400;
-            goto end;
+            end_response(req);
+            continue;
         }
         req->lenDecodeUri = strlen(req->decodeUri);
 
@@ -161,34 +161,34 @@ void parse_request_thread()
         {
             print_err(req, "<%s:%d> Error UsePHP=%s\n", __func__, __LINE__, conf->UsePHP.c_str());
             req->err = -RS404;
-            goto end;
+            end_response(req);
+            continue;
         }
 
         if (req->req_hd.iUpgrade >= 0)
         {
             print_err(req, "<%s:%d> req->upgrade: %s\n", __func__, __LINE__, req->reqHdValue[req->req_hd.iUpgrade]);
             req->err = -RS505;
-            goto end;
+            end_response(req);
+            continue;
         }
         //--------------------------------------------------------------
-        if ((req->reqMethod == M_GET) || 
-            (req->reqMethod == M_HEAD) || 
-            (req->reqMethod == M_POST) || 
-            (req->reqMethod == M_OPTIONS))
+        if ((req->reqMethod != M_GET) &&
+            (req->reqMethod != M_HEAD) &&
+            (req->reqMethod != M_POST) &&
+            (req->reqMethod != M_OPTIONS))
         {
-            int ret = prepare_response(req);
-            if (ret == 1)
-            {// "req" may be free !!!
-                continue;
-            }
-
-            req->err = ret;
-        }
-        else
             req->err = -RS405;
+            end_response(req);
+            continue;
+        }
 
-    end:
-        end_response(req);
+        int ret = prepare_response(req);
+        if (ret < 0)
+        {
+            req->err = ret;
+            end_response(req);
+        }
     }
 }
 //======================================================================
