@@ -476,7 +476,7 @@ void EventHandlerClass::push_ssl_shutdown(Connect *r)
     add_wait_list(r);
 }
 //----------------------------------------------------------------------
-void EventHandlerClass::close_event_handler(void)
+void EventHandlerClass::close_event_handler()
 {
     close_thr = 1;
     cond_thr.notify_one();

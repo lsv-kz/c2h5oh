@@ -14,7 +14,7 @@ OBJS = $(OBJSDIR)/c2h5oh.o \
 	$(OBJSDIR)/classes.o \
 	$(OBJSDIR)/create_headers.o \
 	$(OBJSDIR)/config.o \
-	$(OBJSDIR)/threads_manager.o \
+	$(OBJSDIR)/manager.o \
 	$(OBJSDIR)/response.o \
 	$(OBJSDIR)/event_handler.o \
 	$(OBJSDIR)/socket.o \
@@ -50,8 +50,8 @@ $(OBJSDIR)/create_headers.o: create_headers.cpp main.h string__.h
 $(OBJSDIR)/config.o: config.cpp main.h string__.h
 	$(CC) $(CFLAGS) -c config.cpp -o $@
 
-$(OBJSDIR)/threads_manager.o: threads_manager.cpp main.h string__.h ranges.h
-	$(CC) $(CFLAGS) -c threads_manager.cpp -o $@
+$(OBJSDIR)/manager.o: manager.cpp main.h string__.h ranges.h
+	$(CC) $(CFLAGS) -c manager.cpp -o $@
 
 $(OBJSDIR)/response.o: response.cpp main.h ranges.h string__.h
 	$(CC) $(CFLAGS) -c response.cpp -o $@

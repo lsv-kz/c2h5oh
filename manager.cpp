@@ -199,14 +199,14 @@ unsigned long get_all_request();
 Connect *create_req();
 int event_handler_cl_new();
 void event_handler_cl_delete();
-void close_parse_req_threads();
-void list_init();
+void close_threads_manager();
+void threads_manager();
+int get_max_thr();
 //======================================================================
 void manager(int sockServer)
 {
     unsigned long allConn = 0;
     num_conn = close_server = 0;
-    list_init();
     //------------------------------------------------------------------
     if (chdir(conf->DocumentRoot.c_str()))
     {
@@ -229,26 +229,19 @@ void manager(int sockServer)
 
     memset(conn_count, 0, sizeof(int) * conf->NumWorkThreads);
     //------------------------------------------------------------------
-    int n = 0;
-    while (n < conf->NumParseReqThreads)
+    thread thr;
+    try
     {
-        thread t;
-        try
-        {
-            t = thread(parse_request_thread);
-            t.detach();
-        }
-        catch (...)
-        {
-            print_err("<%s:%d> Error create thread: errno=%d\n", __func__, __LINE__, errno);
-            exit(errno);
-        }
-
-        ++n;
+        thr = thread(threads_manager);
+    }
+    catch (...)
+    {
+        print_err("<%s:%d> Error create thread: errno=%d\n", __func__, __LINE__, errno);
+        exit(errno);
     }
     //------------------------------------------------------------------
-    printf(" +++++ num threads=%u, pid=%u, uid=%u, gid=%u +++++\n",
-                                n, getpid(), getuid(), getgid());
+    printf(" +++++ pid=%u, uid=%u, gid=%u +++++\n",
+                                getpid(), getuid(), getgid());
     //------------------------------------------------------------------
     thread *work_thr = new(nothrow) thread [conf->NumWorkThreads];
     if (!work_thr)
@@ -311,7 +304,11 @@ void manager(int sockServer)
             close(clientSocket);
             continue;
         }
-
+/*
+        int opt = 10000000;  
+        int optlen = sizeof(opt);
+        setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, (void *)&opt, optlen);
+*/
         int flags = 1;
         if (ioctl(clientSocket, FIONBIO, &flags) == -1)
         {
@@ -417,9 +414,10 @@ void manager(int sockServer)
     event_handler_cl_delete();
     delete [] conn_count;
 
-    print_err("<%s:%d> all_conn=%lu, all_req=%lu; open_conn=%d\n",
-                    __func__, __LINE__, allConn, get_all_request(), num_conn);
-    close_parse_req_threads();
+    print_err("<%s:%d> all_conn=%lu, all_req=%lu; open_conn=%d, max_thr=%d\n",
+                    __func__, __LINE__, allConn, get_all_request(), num_conn, get_max_thr());
+    close_threads_manager();
+    thr.join();
 
     usleep(100000);
 }

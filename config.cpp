@@ -69,8 +69,11 @@ void create_conf_file(const char *path)
 
     fprintf(f, "BalancedWorkThreads  y\n\n");
 
-    fprintf(f, "NumWorkThreads       2\n");
-    fprintf(f, "NumParseReqThreads   2\n");
+    fprintf(f, "NumWorkThreads       2\n\n");
+
+    fprintf(f, "MaxParseReqThreads   8\n");
+    fprintf(f, "MinParseReqThreads    4\n\n");
+
     fprintf(f, "MaxCgiProc           15\n\n");
 
     fprintf(f, "MaxRequestsPerClient  100\n\n");
@@ -335,8 +338,10 @@ int read_conf_file(FILE *fconf)
                 c.BalancedWorkThreads = (char)tolower(s2[0]);
             else if ((s1 == "NumWorkThreads") && is_number(s2.c_str()))
                 s2 >> c.NumWorkThreads;
-            else if ((s1 == "NumParseReqThreads") && is_number(s2.c_str()))
-                s2 >> c.NumParseReqThreads;
+            else if ((s1 == "MaxParseReqThreads") && is_number(s2.c_str()))
+                s2 >> c.MaxParseReqThreads;
+            else if ((s1 == "MinParseReqThreads") && is_number(s2.c_str()))
+                s2 >> c.MinParseReqThreads;
             else if ((s1 == "MaxCgiProc") && is_number(s2.c_str()))
                 s2 >> c.MaxCgiProc;
             else if ((s1 == "MaxRequestsPerClient") && is_number(s2.c_str()))
@@ -502,15 +507,21 @@ int read_conf_file(FILE *fconf)
         exit(1);
     }
     //------------------------------------------------------------------
-    if ((conf->NumWorkThreads > MAX_WORK_THREADS) || (conf->NumWorkThreads < 1))
+    if ((conf->NumWorkThreads > LIMIT_WORK_THREADS) || (conf->NumWorkThreads < 1))
     {
-        fprintf(stderr, "<%s:%d> Error: NumWorkerThreads=%d > %d\n", __func__, __LINE__, conf->NumWorkThreads, MAX_WORK_THREADS);
+        fprintf(stderr, "<%s:%d> Error: NumWorkThreads=%d > %d\n", __func__, __LINE__, conf->NumWorkThreads, LIMIT_WORK_THREADS);
         return -1;
     }
     //------------------------------------------------------------------
-    if ((conf->NumParseReqThreads > MAX_PARSE_REQ_THREADS) || (conf->NumParseReqThreads < 1))
+    if ((conf->MaxParseReqThreads < 1) || (conf->MaxParseReqThreads > LIMIT_PARSE_REQ_THREADS))
     {
-        fprintf(stderr, "<%s:%d> Error: NumParseReqThreads=%d > %d\n", __func__, __LINE__, conf->NumParseReqThreads, MAX_PARSE_REQ_THREADS);
+        fprintf(stderr, "<%s:%d> Error: MaxParseReqThreads=%d > %d\n", __func__, __LINE__, conf->MaxParseReqThreads, LIMIT_PARSE_REQ_THREADS);
+        return -1;
+    }
+
+    if ((conf->MinParseReqThreads < 1) || (conf->MinParseReqThreads > conf->MaxParseReqThreads))
+    {
+        fprintf(stderr, "<%s:%d> Error: MinParseReqThreads=%d\n", __func__, __LINE__, conf->MinParseReqThreads);
         return -1;
     }
     //------------------------------------------------------------------

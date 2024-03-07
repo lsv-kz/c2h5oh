@@ -119,7 +119,8 @@ void print_config()
          << "\n   MaxConnectionPerThr    : " << conf->MaxConnectionPerThr
          << "\n   MaxWorkConnPerThr      : " << conf->MaxWorkConnPerThr
          << "\n   NumWorkThreads         : " << conf->NumWorkThreads
-         << "\n   NumParseReqThreads     : " << conf->NumParseReqThreads
+         << "\n   MaxParseReqThreads     : " << conf->MaxParseReqThreads
+         << "\n   MinParseReqThreads     : " << conf->MinParseReqThreads
          << "\n\n   MaxRequestsPerClient   : " << conf->MaxRequestsPerClient
          << "\n   MaxCgiProc             : " << conf->MaxCgiProc
          << "\n   TimeoutKeepAlive       : " << conf->TimeoutKeepAlive

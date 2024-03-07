@@ -57,8 +57,8 @@ const int  MAX_NAME = 256;
 const int  SIZE_BUF_REQUEST = 8192;
 const int  MAX_HEADERS = 25;
 const int  ERR_TRY_AGAIN = -1000;
-const int  MAX_WORK_THREADS = 8;
-const int  MAX_PARSE_REQ_THREADS = 8;
+const int  LIMIT_WORK_THREADS = 8;
+const int  LIMIT_PARSE_REQ_THREADS = 128;
 const char boundary[] = "---------a9b5r7a4c0a2d5a1b8r3a";
 
 enum {
@@ -155,13 +155,17 @@ public:
     int SndBufSize;
 
     int MaxAcceptConnections;
+
     int MaxConnectionPerThr;
     int MaxWorkConnPerThr;
 
     char BalancedWorkThreads;
 
     int NumWorkThreads;
-    int NumParseReqThreads;
+
+    int MaxParseReqThreads;
+    int MinParseReqThreads;
+
     int MaxCgiProc;
 
     unsigned int MaxRanges;
@@ -324,8 +328,6 @@ public:
         int dataLen;
         int paddingLen;
         char header[8];
-        char buf[2048];
-        int size_buf = 2047;
         int len_buf;
     } fcgi;
 
@@ -374,7 +376,7 @@ class EventHandlerClass
     Connect *cgi_wait_list_start;
     Connect *cgi_wait_list_end;
 
-    int send_part_file(Connect *req);
+    int send_part_file(Connect *r);
     void del_from_list(Connect *r);
 
     void worker(Connect *r);
@@ -384,22 +386,22 @@ class EventHandlerClass
     void choose_worker(Connect *r);
     int set_pollfd_array(Connect *r, int *i);
 
-    void wait_pid(Connect *req);
+    void wait_pid(Connect *r);
     int cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv);
-    int cgi_create_proc(Connect *req);
+    int cgi_create_proc(Connect *r);
     void cgi_worker(Connect* r);
     int cgi_err(Connect *r);
     void cgi_set_status_readheaders(Connect *r);
-    int cgi_set_size_chunk(Connect *req);
-    int cgi_stdin(Connect *req);
-    int cgi_stdout(Connect *req);
-    int cgi_find_empty_line(Connect *req);
-    int cgi_read_http_headers(Connect *req);
+    int cgi_set_size_chunk(Connect *r);
+    int cgi_stdin(Connect *r);
+    int cgi_stdout(Connect *r);
+    int cgi_find_empty_line(Connect *r);
+    int cgi_read_http_headers(Connect *r);
 
     void fcgi_set_header(Connect* r, int type);
     void get_info_from_header(Connect* r, const char* p);
     void fcgi_set_param(Connect *r);
-    int fcgi_create_connect(Connect *req);
+    int fcgi_create_connect(Connect *r);
     int fcgi_stdin(Connect *r);
     int fcgi_stdout(Connect *r);
     int fcgi_read_http_headers(Connect *r);
@@ -411,7 +413,7 @@ class EventHandlerClass
     void read_data_from_buf(Connect *r);
 
     int scgi_set_size_data(Connect* r);
-    int scgi_create_connect(Connect *req);
+    int scgi_create_connect(Connect *r);
     int scgi_set_param(Connect *r);
     void scgi_worker(Connect* r);
     int scgi_err(Connect *r);
@@ -442,51 +444,24 @@ public:
     long get_num_req();
 };
 //----------------------------------------------------------------------
-class LinkedList
-{
-private:
-    Connect *list_start;
-    Connect *list_end;
-
-    std::mutex mtx_list;
-    std::condition_variable cond_list;
-
-    unsigned long all_req;
-    int thr_exit;
-
-public:
-    LinkedList(const LinkedList&) = delete;
-    LinkedList(){}
-    ~LinkedList();
-    //-------------------------------
-    void init();
-    void push_resp_list(Connect *req);
-    Connect *pop_resp_list();
-    void close_threads();
-    unsigned int get_all_request()
-    {
-        return all_req;
-    }
-};
-//----------------------------------------------------------------------
 extern char **environ;
 //----------------------------------------------------------------------
 void parse_request_thread();
-int prepare_response(Connect *req);
-int options(Connect *req);
-int index_dir(Connect *req, std::string& path);
+int prepare_response(Connect *r);
+int options(Connect *r);
+int index_dir(Connect *r, std::string& path);
 //----------------------------------------------------------------------
 int create_fcgi_socket(Connect *r, const char *host);
-int read_from_client(Connect *req, char *buf, int len);
-int write_to_client(Connect *req, const char *buf, int len);
-int read_request_headers(Connect* req);
+int read_from_client(Connect *r, char *buf, int len);
+int write_to_client(Connect *r, const char *buf, int len);
+int read_request_headers(Connect* r);
 int get_sock_fcgi(Connect *r, const char *script);
 //----------------------------------------------------------------------
 int encode(const char *s_in, char *s_out, int len_out);
 int decode(const char *s_in, int len_in, char *s_out, int len);
 //----------------------------------------------------------------------
-int send_message(Connect *req, const char *msg);
-int create_response_headers(Connect *req);
+int send_message(Connect *r, const char *msg);
+int create_response_headers(Connect *r);
 //----------------------------------------------------------------------
 std::string get_time();
 std::string get_time(time_t t);
@@ -514,25 +489,25 @@ int clean_path(char *path);
 const char *content_type(const char *s);
 
 const char *base_name(const char *path);
-int parse_startline_request(Connect *req, char *s);
-int parse_headers(Connect *req, char *s, int n);
-int find_empty_line(Connect *req);
+int parse_startline_request(Connect *r, char *s);
+int parse_headers(Connect *r, char *s, int n);
+int find_empty_line(Connect *r);
 //----------------------------------------------------------------------
 void create_logfiles(const std::string &);
 void close_logs();
 void print_err(const char *format, ...);
-void print_err(Connect *req, const char *format, ...);
-void print_log(Connect *req);
+void print_err(Connect *r, const char *format, ...);
+void print_log(Connect *r);
 //----------------------------------------------------------------------
 void push_resp_list(Connect *r);
-void end_response(Connect *req);
-void close_connect(Connect *req);
+void end_response(Connect *r);
+void close_connect(Connect *r);
 //----------------------------------------------------------------------
-void push_cgi(Connect *req);
-void push_pollin_list(Connect *req);
-void push_send_file(Connect *req);
-void push_send_multipart(Connect *req);
-void push_send_html(Connect *req);
+void push_cgi(Connect *r);
+void push_pollin_list(Connect *r);
+void push_send_file(Connect *r);
+void push_send_multipart(Connect *r);
+void push_send_html(Connect *r);
 void push_ssl_shutdown(Connect *r);
 void event_handler(int);
 void close_work_threads();
@@ -545,7 +520,7 @@ SSL_CTX *create_context();
 int configure_context(SSL_CTX *ctx);
 SSL_CTX *Init_SSL();
 const char *ssl_strerror(int err);
-int ssl_read(Connect *req, char *buf, int len);
-int ssl_write(Connect *req, const char *buf, int len);
+int ssl_read(Connect *r, char *buf, int len);
+int ssl_write(Connect *r, const char *buf, int len);
 
 #endif
