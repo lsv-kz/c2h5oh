@@ -490,7 +490,7 @@ const char *content_type(const char *s);
 
 const char *base_name(const char *path);
 int parse_startline_request(Connect *r, char *s);
-int parse_headers(Connect *r, char *s, int n);
+int parse_headers(Connect *r);
 int find_empty_line(Connect *r);
 //----------------------------------------------------------------------
 void create_logfiles(const std::string &);

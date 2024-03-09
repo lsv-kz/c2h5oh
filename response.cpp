@@ -159,15 +159,13 @@ void parse_request_thread()
             break;
         }
         //--------------------------------------------------------------
-        for (int i = 1; i < req->countReqHeaders; ++i)
+        req->err = parse_headers(req);
+        if (req->err < 0)
         {
-            int ret = parse_headers(req, req->reqHdName[i], i);
-            if (ret < 0)
-            {
-                print_err(req, "<%s:%d> Error parse_headers(): %d\n", __func__, __LINE__, ret);
-                if (exit_thread(req))
-                    return;
-            }
+            print_err(req, "<%s:%d> Error parse_headers(): %d\n", __func__, __LINE__, req->err);
+            if (exit_thread(req))
+                return;
+            continue;
         }
     #ifdef TCP_CORK_
         if (conf->TcpCork == 'y')
@@ -188,6 +186,7 @@ void parse_request_thread()
             req->err = -RS505;
             if (exit_thread(req))
                 return;
+            continue;
         }
 
         if (req->numReq >= (unsigned int)conf->MaxRequestsPerClient || (req->httpProt == HTTP10))
@@ -210,6 +209,7 @@ void parse_request_thread()
             req->err = -RS404;
             if (exit_thread(req))
                 return;
+            continue;
         }
 
         if (clean_path(req->decodeUri) <= 0)
@@ -219,6 +219,7 @@ void parse_request_thread()
             req->err = -RS400;
             if (exit_thread(req))
                 return;
+            continue;
         }
         req->lenDecodeUri = strlen(req->decodeUri);
 
@@ -228,6 +229,7 @@ void parse_request_thread()
             req->err = -RS404;
             if (exit_thread(req))
                 return;
+            continue;
         }
 
         if (req->req_hd.iUpgrade >= 0)
@@ -236,6 +238,7 @@ void parse_request_thread()
             req->err = -RS505;
             if (exit_thread(req))
                 return;
+            continue;
         }
         //--------------------------------------------------------------
         if ((req->reqMethod != M_GET) &&
@@ -246,6 +249,7 @@ void parse_request_thread()
             req->err = -RS501;
             if (exit_thread(req))
                 return;
+            continue;
         }
 
         int ret = prepare_response(req);
@@ -254,8 +258,9 @@ void parse_request_thread()
             req->err = ret;
             if (exit_thread(req))
                 return;
+            continue;
         }
-    
+
         if (exit_thread(NULL))
             return;
     }

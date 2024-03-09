@@ -202,11 +202,13 @@ public:
     String& operator >> (double&) = delete;
     String& operator >> (char*) = delete;
     String(const String&) = delete;
+    String(const char *s) { append(s); }
     //------------------------------------------------------------------
     /*String(const String& s)
     {
         if (s.buf)
         {
+            if (buf) delete [] buf;
             buf = new(std::nothrow) char [s.buf_size];
             if (buf)
             {
