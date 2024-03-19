@@ -189,7 +189,6 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
             if (r->lenTail > 0)
             {
                 r->io_direct = TO_CGI;
-                r->io_status = WAIT;
                 r->cgi.p = r->tail;
                 r->cgi.len_buf = r->lenTail;
                 r->tail = NULL;
@@ -316,7 +315,6 @@ int EventHandlerClass::cgi_stdin(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0
 
         req->cgi.len_post -= req->cgi.len_buf;
         req->io_direct = TO_CGI;
-        req->io_status = WAIT;
         req->cgi.p = req->cgi.buf;
     }
     else if (req->io_direct == TO_CGI)
@@ -358,7 +356,6 @@ int EventHandlerClass::cgi_stdin(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0
                 {
                     req->cgi.op.scgi = SCGI_READ_HTTP_HEADERS;
                     req->io_direct = FROM_CGI;
-                    req->io_status = WAIT;
                     req->tail = NULL;
                     req->lenTail = 0;
                     req->p_newline = req->cgi.p = req->cgi.buf + 8;
@@ -406,7 +403,6 @@ int EventHandlerClass::cgi_stdout(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 
                 req->cgi.p = req->cgi.buf + 8;
                 cgi_set_size_chunk(req);
                 req->io_direct = TO_CLIENT;
-                req->io_status = WORK;
                 req->mode_send = CHUNK_END;
                 return req->cgi.len_buf;
             }
@@ -414,7 +410,6 @@ int EventHandlerClass::cgi_stdout(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 
         }
 
         req->io_direct = TO_CLIENT;
-        req->io_status = WORK;
         if (req->mode_send == CHUNK)
         {
             req->cgi.p = req->cgi.buf + 8;
@@ -443,7 +438,6 @@ int EventHandlerClass::cgi_stdout(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 
             if (req->mode_send == CHUNK_END)
                 return 0;
             req->io_direct = FROM_CGI;
-            req->io_status = WAIT;
         }
     }
 
@@ -644,7 +638,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
                 r->resp_headers.len = r->resp_headers.s.size();
                 r->cgi.op.cgi = CGI_SEND_HTTP_HEADERS;
                 r->io_direct = TO_CLIENT;
-                r->io_status = WORK;
                 r->sock_timer = 0;
             }
         }
@@ -695,7 +688,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
                             r->lenTail = 0;
                             r->tail = NULL;
                             r->io_direct = TO_CLIENT;
-                            r->io_status = WORK;
                             if (r->mode_send == CHUNK)
                             {
                                 if (cgi_set_size_chunk(r))
@@ -711,7 +703,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
                             r->cgi.len_buf = 0;
                             r->cgi.p = NULL;
                             r->io_direct = FROM_CGI;
-                            r->io_status = WAIT;
                         }
                     }
                 }
@@ -762,7 +753,6 @@ void EventHandlerClass::cgi_set_status_readheaders(Connect *r)
 {
     r->cgi.op.cgi = CGI_READ_HTTP_HEADERS;
     r->io_direct = FROM_CGI;
-    r->io_status = WAIT;
     r->tail = NULL;
     r->lenTail = 0;
     r->p_newline = r->cgi.p = r->cgi.buf + 8;

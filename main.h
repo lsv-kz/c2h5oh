@@ -57,7 +57,7 @@ const int  MAX_NAME = 256;
 const int  SIZE_BUF_REQUEST = 8192;
 const int  MAX_HEADERS = 25;
 const int  ERR_TRY_AGAIN = -1000;
-const int  LIMIT_WORK_THREADS = 8;
+const int  LIMIT_WORK_THREADS = 16;
 const int  LIMIT_PARSE_REQ_THREADS = 128;
 const char boundary[] = "---------a9b5r7a4c0a2d5a1b8r3a";
 
@@ -375,6 +375,8 @@ class EventHandlerClass
 
     Connect *cgi_wait_list_start;
     Connect *cgi_wait_list_end;
+
+    Connect *start_chunk;
 
     int send_part_file(Connect *r);
     void del_from_list(Connect *r);

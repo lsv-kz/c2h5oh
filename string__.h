@@ -7,8 +7,8 @@
 class String
 {
     char *buf;
-    int buf_size;
-    int len;
+    unsigned int buf_size;
+    unsigned int len;
     unsigned int ind_ = 0;
     int err = 0;
     //------------------------------------------------------------------
@@ -406,7 +406,7 @@ public:
             return buf;
     }
     //------------------------------------------------------------------
-    int reserve(int n)
+    int reserve(unsigned int n)
     {
         if (buf_size >= n) return 0;
         char *tmp_buf = new(std::nothrow) char [n];
@@ -430,7 +430,7 @@ public:
     
     int capacity() const { return buf_size; }
     
-    void reduce(int n)
+    void reduce(unsigned int n)
     {
         if (n >= len)
             return;

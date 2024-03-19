@@ -22,7 +22,7 @@ void EventHandlerClass::init(int n)
     num_thr = n;
     num_request = 0;
     close_thr = num_wait = num_work = stat_work = cgi_work = 0;
-    work_list_start = work_list_end = wait_list_start = wait_list_end = NULL;
+    work_list_start = work_list_end = wait_list_start = wait_list_end = start_chunk = NULL;
     cgi_wait_list_start = cgi_wait_list_end = NULL;
 }
 //----------------------------------------------------------------------
@@ -33,6 +33,9 @@ long EventHandlerClass::get_num_req()
 //----------------------------------------------------------------------
 void EventHandlerClass::del_from_list(Connect *r)
 {
+    if (r == start_chunk)
+        start_chunk = r->next;
+
     if (r->operation == DYN_PAGE)
     {
         if ((r->cgi_type == CGI) || 
@@ -108,6 +111,9 @@ mtx_thr.lock();
         work_list_end = wait_list_end;
         wait_list_start = wait_list_end = NULL;
     }
+
+    if (start_chunk == NULL)
+        start_chunk = work_list_start;
 mtx_thr.unlock();
 }
 //----------------------------------------------------------------------
@@ -115,10 +121,12 @@ int EventHandlerClass::set_poll()
 {
     num_work = num_wait = 0;
     time_t t = time(NULL);
-    Connect *r = work_list_start, *next = NULL;
+    Connect *r = start_chunk, *next = NULL;
     for ( ; r; r = next)
     {
         next = r->next;
+        if (next == NULL)
+            start_chunk = work_list_start;
 
         if (r->sock_timer == 0)
             r->sock_timer = t;
@@ -189,7 +197,10 @@ int EventHandlerClass::set_poll()
         }
         
         if ((num_work + num_wait) >= conf->MaxWorkConnPerThr)
+        {
+            start_chunk = next;
             break;
+        }
     }
 
     return 1;
@@ -203,7 +214,6 @@ int EventHandlerClass::poll_worker()
         int time_poll = conf->TimeoutPoll;
         if (num_work > 0)
             time_poll = 0;
-
         ret = poll(poll_fd, num_wait, time_poll);
         if (ret == -1)
         {
@@ -238,13 +248,13 @@ int EventHandlerClass::poll_worker()
             if (poll_fd[i].revents & POLLIN)
             {
                 --all;
-                r->io_status = WORK;
+                if (r->io_direct == FROM_CLIENT)
+                    r->io_status = WORK;
                 choose_worker(r);
             }
             else if (poll_fd[i].revents == POLLOUT)
             {
                 --all;
-                r->io_status = WORK;
                 choose_worker(r);
             }
             else if (poll_fd[i].revents)
@@ -386,6 +396,7 @@ int EventHandlerClass::wait_conn()
         while ((!work_list_start) && (!wait_list_start) && (!cgi_wait_list_start) && (!close_thr))
         {
             cond_thr.wait(lk);
+            start_chunk = work_list_start;
         }
     }
 
@@ -414,6 +425,7 @@ mtx_cgi.unlock();
 //----------------------------------------------------------------------
 void EventHandlerClass::add_wait_list(Connect *r)
 {
+    r->io_status = WAIT;
     r->sock_timer = 0;
     r->next = NULL;
 mtx_thr.lock();
@@ -431,7 +443,6 @@ mtx_thr.unlock();
 //----------------------------------------------------------------------
 void EventHandlerClass::push_send_file(Connect *r)
 {
-    r->io_status = WORK;
     r->io_direct = TO_CLIENT;
     r->source_entity = FROM_FILE;
     r->operation = SEND_RESP_HEADERS;
@@ -443,7 +454,6 @@ void EventHandlerClass::push_send_file(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::push_pollin_list(Connect *r)
 {
-    r->io_status = WAIT;
     r->io_direct = FROM_CLIENT;
     r->source_entity = NO_ENTITY;
     add_wait_list(r);
@@ -451,7 +461,6 @@ void EventHandlerClass::push_pollin_list(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::push_send_multipart(Connect *r)
 {
-    r->io_status = WORK;
     r->io_direct = TO_CLIENT;
     r->source_entity = MULTIPART_ENTITY;
     r->operation = SEND_RESP_HEADERS;
@@ -462,7 +471,6 @@ void EventHandlerClass::push_send_multipart(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::push_send_html(Connect *r)
 {
-    r->io_status = WORK;
     r->io_direct = TO_CLIENT;
     r->operation = SEND_RESP_HEADERS;
     r->source_entity = FROM_DATA_BUFFER;
@@ -770,8 +778,8 @@ void EventHandlerClass::worker(Connect *r)
         else
         {
             r->operation = READ_REQUEST;
-            r->io_status = WAIT;
             r->io_direct = FROM_CLIENT;
+            r->io_status = WAIT;
             r->sock_timer = 0;
         }
     }

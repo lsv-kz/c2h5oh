@@ -216,7 +216,6 @@ int EventHandlerClass::scgi_create_connect(Connect *req)
     }
 
     req->cgi.op.scgi = SCGI_PARAMS;
-    req->io_direct = TO_CGI;
     req->timeout = conf->TimeoutCGI;
     req->sock_timer = 0;
 
@@ -332,6 +331,7 @@ void EventHandlerClass::scgi_worker(Connect* r)
                 else
                 {
                     r->io_direct = FROM_CLIENT;
+                    r->io_status = WORK;
                 }
             }
             else

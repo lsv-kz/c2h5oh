@@ -299,7 +299,6 @@ int EventHandlerClass::fcgi_create_connect(Connect *req)
     *(p++) = 0;
 
     req->cgi.op.fcgi = FASTCGI_BEGIN;
-    req->io_direct = TO_CGI;
     req->sock_timer = 0;
     req->fcgi.http_headers_received = false;
 
@@ -391,6 +390,7 @@ int EventHandlerClass::fcgi_stdin(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0 
                 else
                 {
                     r->io_direct = FROM_CLIENT;
+                    r->io_status = WORK;
                 }
             }
         }
@@ -679,6 +679,7 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                     else
                     {
                         r->io_direct = FROM_CLIENT;
+                        r->io_status = WORK;
                     }
                 }
                 else
@@ -845,13 +846,13 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                         r->fcgi.status = FCGI_READ_HEADER;
                         r->cgi.p = r->cgi.buf + 8;
                         r->cgi.len_buf = 0;
-                        r->io_direct = FROM_CGI;
                     }
                     else
                     {
                         r->fcgi.status = FCGI_READ_PADDING;
-                        r->io_direct = FROM_CGI;
                     }
+
+                    r->io_direct = FROM_CGI;
                 }
             }
         }
