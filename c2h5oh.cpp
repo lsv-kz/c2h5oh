@@ -187,6 +187,7 @@ int get_cwd(string& s)
 //======================================================================
 int main(int argc, char *argv[])
 {
+    pid_t pid;
     myFileName = argv[0];
 
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
@@ -195,8 +196,11 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    pid_t pid;
-    while ((pid = waitpid(-1, NULL, WNOHANG)) != -1);
+    if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
+    {
+        fprintf(stderr, "<%s:%d> Error signal(SIGCHLD): %s\n", __func__, __LINE__, strerror(errno));
+        return 1;
+    }
 
     if (get_cwd(cwd))
     {

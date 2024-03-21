@@ -388,7 +388,7 @@ class EventHandlerClass
     void choose_worker(Connect *r);
     int set_pollfd_array(Connect *r, int *i);
 
-    void wait_pid(Connect *r);
+    void kill_chld(Connect *r);
     int cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv);
     int cgi_create_proc(Connect *r);
     void cgi_worker(Connect* r);

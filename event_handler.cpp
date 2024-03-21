@@ -53,7 +53,7 @@ void EventHandlerClass::del_from_list(Connect *r)
                 r->cgi.to_script = -1;
             }
             
-            wait_pid(r);
+            kill_chld(r);
         }
         else if ((r->cgi_type == PHPFPM) || 
                 (r->cgi_type == FASTCGI) ||

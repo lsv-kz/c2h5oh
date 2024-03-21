@@ -14,20 +14,9 @@ const char *get_script_name(const char *name)
     return "";
 }
 //======================================================================
-void EventHandlerClass::wait_pid(Connect *req)
+void EventHandlerClass::kill_chld(Connect *req)
 {
-    int n = waitpid(req->cgi.pid, NULL, WNOHANG); // no blocking
-    if (n == -1)
-    {
-        //print_err(req, "<%s:%d> Error waitpid(%d): %s\n", __func__, __LINE__, req->cgi.pid, strerror(errno));
-    }
-    else if (n == 0)
-    {
-        if (kill(req->cgi.pid, SIGKILL) == 0)
-            waitpid(req->cgi.pid, NULL, 0);
-        else
-            print_err(req, "<%s:%d> Error kill(%d): %s\n", __func__, __LINE__, req->cgi.pid, strerror(errno));
-    }
+    kill(req->cgi.pid, SIGKILL);
 }
 //----------------------------------------------------------------------
 int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
@@ -112,7 +101,7 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
             }
             close(cgi_serv[1]);
         }
-        
+
         if (r->cgi_type == PHPCGI)
             setenv("REDIRECT_STATUS", "true", 1);
         setenv("PATH", "/bin:/usr/bin:/usr/local/bin", 1);
@@ -133,7 +122,7 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
 
         setenv("SCRIPT_NAME", r->scriptName.c_str(), 1);
         setenv("SCRIPT_FILENAME", path.c_str(), 1);
-        
+
         if (r->reqMethod == M_POST)
         {
             if (r->req_hd.iReqContentType >= 0)

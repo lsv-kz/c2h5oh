@@ -27,7 +27,7 @@ protected:
         if (err) return;
         if (n == 0)
         {
-            err = 1;
+            err = -1;
             return;
         }
         else if (n <= SizeArray)
@@ -39,7 +39,7 @@ protected:
         range = new(std::nothrow) Range [SizeArray];
         if (!range)
         {
-            err = 1;
+            err = -1;
             return;
         }
     }
@@ -67,7 +67,7 @@ public:
         if (err) return *this;
         if (!range || (nRanges >= SizeArray))
         {
-            err = 1;
+            err = -1;
             return *this;
         }
 

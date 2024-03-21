@@ -137,7 +137,7 @@ void Ranges::parse_ranges(char *sRange)
                     end = ll;
                 else
                 {
-                    err = RS416;
+                    err = -RS416;
                     return;
                 }
 
@@ -161,13 +161,13 @@ void Ranges::parse_ranges(char *sRange)
                 }
                 else
                 {
-                    err = RS416;
+                    err = -RS416;
                     return;
                 }
             }
             else if (i == 2)
             {
-                err = RS416;
+                err = -RS416;
                 return;
             }
             else
@@ -182,7 +182,7 @@ void Ranges::parse_ranges(char *sRange)
                 end = size - 1;
             else if (i != 3)
             {
-                err = RS416;
+                err = -RS416;
                 return;
             }
 
@@ -205,13 +205,13 @@ void Ranges::parse_ranges(char *sRange)
             }
             else
             {
-                err = RS416;
+                err = -RS416;
                 return;
             }
         }
         else
         {
-            err = RS416;
+            err = -RS416;
             return;
         }
     }
@@ -222,13 +222,13 @@ void Ranges::init(char *s, long long sz)
     err = 0;
     if (!s)
     {
-        err = RS500;
+        err = -RS500;
         return;
     }
 
     if (conf->MaxRanges == 0)
     {
-        err = RS403;
+        err = -RS403;
         return;
     }
 
@@ -249,7 +249,7 @@ void Ranges::init(char *s, long long sz)
     sizeFile = sz;
     parse_ranges(s);
     if ((nRanges == 0) && (err == 0))
-        err = RS416;
+        err = -RS416;
     else if (nRanges > 1)
         check_ranges();
 }

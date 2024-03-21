@@ -253,15 +253,23 @@ void parse_request_thread()
         }
 
         int ret = prepare_response(req);
-        if (ret < 0)
+        if (ret == 1)
         {
-            req->err = ret;
-            if (exit_thread(req))
+            if (exit_thread(NULL))
                 return;
             continue;
         }
+        else if (ret < 0)
+        {
+            req->err = ret;
+        }
+        else
+        {
+            print_err("<%s:%d> !!! prepare_response()=%d\n", __func__, __LINE__, ret);
+            req->err = -1;
+        }
 
-        if (exit_thread(NULL))
+        if (exit_thread(req))
             return;
     }
 }
