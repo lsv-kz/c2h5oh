@@ -73,6 +73,14 @@ int create_server_socket(const Config *conf)
         return -1;
     }
 
+    struct linger l;
+    l.l_onoff = 1;
+    l.l_linger = 0;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_LINGER, &l, sizeof(l)))
+    {
+        print_err("<%s:%d> Error setsockopt(): %s\n", __func__, __LINE__, strerror(errno));
+    }
+
     if (listen(sockfd, conf->ListenBacklog) == -1)
     {
         fprintf(stderr, "Error listen(): %s\n", strerror(errno));
@@ -316,7 +324,10 @@ int read_request_headers(Connect *req)
 {
     int num_read = SIZE_BUF_REQUEST - req->req.len - 1;
     if (num_read <= 0)
+    {
+        print_err(req, "<%s:%d> Error 414: %d\n", __func__, __LINE__, req->req.len);
         return -RS414;
+    }
     int n = read_from_client(req, req->req.buf + req->req.len, num_read);
     if (n < 0)
     {

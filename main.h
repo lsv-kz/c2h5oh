@@ -154,12 +154,12 @@ public:
     char SendFile;
     int SndBufSize;
 
+    char BalancedWorkThreads;
+
     int MaxAcceptConnections;
 
     int MaxConnectionPerThr;
     int MaxWorkConnPerThr;
-
-    char BalancedWorkThreads;
 
     int NumWorkThreads;
 
@@ -168,7 +168,7 @@ public:
 
     int MaxCgiProc;
 
-    unsigned int MaxRanges;
+    int MaxRanges;
     long int ClientMaxBodySize;
 
     int MaxRequestsPerClient;

@@ -234,7 +234,7 @@ void Ranges::init(char *s, long long sz)
 
     nRanges = index = 0;
 
-    unsigned int n = 0;
+    int n = 0;
     for ( char *p = s; *p; ++p)
     {
         if (*p == ',')

@@ -83,7 +83,10 @@ void close_connect(Connect *req)
     }
 
     shutdown(req->clientSocket, SHUT_RDWR);
-    close(req->clientSocket);
+    if (close(req->clientSocket))
+    {
+        print_err(req, "<%s:%d> Error close(): %s\n", __func__, __LINE__, strerror(errno));
+    }
     int n = req->numThr;
     delete req;
 

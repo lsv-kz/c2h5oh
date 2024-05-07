@@ -733,7 +733,7 @@ void EventHandlerClass::worker(Connect *r)
                 r->io_status = WAIT;
             else
             {
-                r->err = -1;
+                r->err = ret;
                 del_from_list(r);
                 end_response(r);
             }
