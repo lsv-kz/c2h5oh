@@ -138,9 +138,16 @@ int EventHandlerClass::fcgi_create_connect(Connect *req)
         return req->fcgi.fd;
     }
 
+    return 0;
+}
+//----------------------------------------------------------------------
+int EventHandlerClass::fcgi_create_params(Connect *req)
+{
     int i = 0;
     Param param;
     req->fcgi.vPar.clear();
+    if (req->fcgi.vPar.capacity() < 45)
+        req->fcgi.vPar.reserve(45);
 
     if (req->cgi_type == PHPFPM)
     {
@@ -286,19 +293,7 @@ int EventHandlerClass::fcgi_create_connect(Connect *req)
     req->fcgi.size_par = i;
     req->fcgi.i_param = 0;
     //----------------------------------------------
-    req->fcgi.dataLen = req->cgi.len_buf = 8;
-    fcgi_set_header(req, FCGI_BEGIN_REQUEST);
-    char *p = req->cgi.buf + 8;
-    *(p++) = (unsigned char) ((FCGI_RESPONDER >> 8) & 0xff);
-    *(p++) = (unsigned char) (FCGI_RESPONDER        & 0xff);
-    *(p++) = 0;
-    *(p++) = 0;
-    *(p++) = 0;
-    *(p++) = 0;
-    *(p++) = 0;
-    *(p++) = 0;
-
-    req->cgi.op.fcgi = FASTCGI_BEGIN;
+    req->io_direct = TO_CGI;
     req->sock_timer = 0;
     req->fcgi.http_headers_received = false;
 
@@ -544,9 +539,9 @@ int EventHandlerClass::fcgi_read_http_headers(Connect *r)
     r->lenTail += n;
     r->cgi.len_buf += n;
     r->cgi.p += n;
-    
+
     *(r->cgi.p) = 0;
-    
+
     int ret = cgi_find_empty_line(r);
     if (ret == 1) // empty line found
     {
@@ -576,7 +571,7 @@ int EventHandlerClass::write_to_fcgi(Connect* r)
         r->cgi.len_buf -= ret;
         r->cgi.p += ret;
     }
-    
+
     return ret;
 }
 //----------------------------------------------------------------------
@@ -613,18 +608,15 @@ void EventHandlerClass::fcgi_worker(Connect* r)
 {
     if (r->cgi.op.fcgi == FASTCGI_CONNECT)
     {
-        int ret = fcgi_create_connect(r);
-        if (ret < 0)
-        {
-            r->err = ret;
-            del_from_list(r);
-            end_response(r);
-        }
-        else
-        {
-            r->fcgi.status = FCGI_READ_DATA;
-            r->fcgi.len_buf = 0;
-        }
+        r->fcgi.status = FCGI_READ_DATA;
+        r->fcgi.len_buf = 0;
+        r->fcgi.dataLen = r->cgi.len_buf = 8;
+        fcgi_set_header(r, FCGI_BEGIN_REQUEST);
+        char *p = r->cgi.buf + 8;
+        *(p++) = (unsigned char) ((FCGI_RESPONDER >> 8) & 0xff);
+        *(p++) = (unsigned char) (FCGI_RESPONDER        & 0xff);
+        memcpy(p, "\0\0\0\0\0\0", 6);
+        r->cgi.op.fcgi = FASTCGI_BEGIN;
     }
     else if (r->cgi.op.fcgi == FASTCGI_BEGIN)
     {
@@ -650,6 +642,13 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             {
                 r->cgi.op.fcgi = FASTCGI_PARAMS;
                 r->io_direct = TO_CGI;
+                int ret = fcgi_create_params(r);
+                if (ret < 0)
+                {
+                    r->err = ret;
+                    del_from_list(r);
+                    end_response(r);
+                }
             }
         }
     }
@@ -851,8 +850,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                     {
                         r->fcgi.status = FCGI_READ_PADDING;
                     }
-
-                    r->io_direct = FROM_CGI;
                 }
             }
         }

@@ -86,7 +86,7 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
                 if (dup2(serv_cgi[0], STDIN_FILENO) < 0)
                 {
                     fprintf(stderr, "<%s:%d> Error dup2(): %s\n", __func__, __LINE__, strerror(errno));
-                    exit(EXIT_FAILURE);
+                    goto to_stdout;
                 }
                 close(serv_cgi[0]);
             }
@@ -97,7 +97,7 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
             if (dup2(cgi_serv[1], STDOUT_FILENO) < 0)
             {
                 fprintf(stderr, "<%s:%d> Error dup2(): %s\n", __func__, __LINE__, strerror(errno));
-                exit(EXIT_FAILURE);
+                goto to_pipe;
             }
             close(cgi_serv[1]);
         }
@@ -133,21 +133,18 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
 
         setenv("QUERY_STRING", r->sReqParam ? r->sReqParam : "", 1);
 
-        int err_ = 0;
         if (r->cgi_type == CGI)
         {
             execl(path.c_str(), base_name(r->scriptName.c_str()), NULL);
-            err_ = errno;
         }
         else if (r->cgi_type == PHPCGI)
         {
             if (conf->UsePHP == "php-cgi")
             {
                 execl(conf->PathPHP.c_str(), base_name(conf->PathPHP.c_str()), NULL);
-                err_ = errno;
             }
         }
-
+    to_stdout:
         printf( "Status: 500 Internal Server Error\r\n"
                 "Content-type: text/html; charset=UTF-8\r\n"
                 "\r\n"
@@ -163,8 +160,24 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
                 "  <hr>\n"
                 "  %s\n"
                 " </body>\n"
-                "</html>", strerror(err_), get_time().c_str());
+                "</html>", strerror(errno), get_time().c_str());
         fclose(stdout);
+        exit(EXIT_FAILURE);
+    to_pipe:
+        char err_msg[] = "Status: 500 Internal Server Error\r\n"
+                "Content-type: text/html; charset=UTF-8\r\n"
+                "\r\n"
+                "<!DOCTYPE html>\n"
+                "<html>\n"
+                " <head>\n"
+                "  <title>500 Internal Server Error</title>\n"
+                "  <meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">\n"
+                " </head>\n"
+                " <body>\n"
+                "  <h3> 500 Internal Server Error</h3>\n"
+                " </body>\n"
+                "</html>";
+        write(cgi_serv[1], err_msg, strlen(err_msg));
         exit(EXIT_FAILURE);
     }
     else
@@ -759,7 +772,7 @@ int EventHandlerClass::cgi_err(Connect *r)
         return -1;
 }
 //----------------------------------------------------------------------
-/*void EventHandlerClass::cgi_add_work_list()
+void EventHandlerClass::cgi_add_work_list()
 {
 mtx_cgi.lock();
     if ((cgi_work < conf->MaxCgiProc) && cgi_wait_list_end)
@@ -782,14 +795,29 @@ mtx_cgi.lock();
             else if ((r->cgi_type == PHPFPM) || (r->cgi_type == FASTCGI))
             {
                 r->cgi.op.fcgi = FASTCGI_CONNECT;
+                int ret = fcgi_create_connect(r);
+                if (ret < 0)
+                {
+                    r->err = ret;
+                    end_response(r);
+                    continue;
+                }
             }
             else if (r->cgi_type == SCGI)
             {
                 r->cgi.op.scgi = SCGI_CONNECT;
+                int ret = scgi_create_connect(r);
+                if (ret < 0)
+                {
+                    r->err = ret;
+                    end_response(r);
+                    continue;
+                }
             }
             else
             {
                 print_err(r, "<%s:%d> operation=%d, cgi_type=%s\n", __func__, __LINE__, r->operation, get_cgi_type(r->cgi_type));
+                r->err = -1;
                 end_response(r);
                 continue;
             }
@@ -806,73 +834,4 @@ mtx_cgi.lock();
         }
     }
 mtx_cgi.unlock();
-}*/
-//----------------------------------------------------------------------
-void EventHandlerClass::cgi_add_work_list()
-{
-    bool return_;
-    int n_max;
-    Connect *r;
-mtx_cgi.lock();
-    if ((cgi_work < (int)conf->MaxCgiProc) && cgi_wait_list_end)
-    {
-        n_max = conf->MaxCgiProc - cgi_work;
-        r = cgi_wait_list_end;
-        return_ = false;
-    }
-    else
-        return_ = true;
-mtx_cgi.unlock();
-    if (return_)
-        return;
-
-    for ( ; (n_max > 0) && r;  --n_max)
-    {
-    mtx_cgi.lock();
-        cgi_wait_list_end = r->prev;
-        if (cgi_wait_list_end == NULL)
-            cgi_wait_list_start = NULL;
-    mtx_cgi.unlock();
-        //--------------------------
-        if ((r->cgi_type == CGI) || (r->cgi_type == PHPCGI))
-        {
-            r->cgi.to_script = -1;
-            r->cgi.from_script = -1;
-            r->cgi.op.cgi = CGI_CREATE_PROC;
-        }
-        else if ((r->cgi_type == PHPFPM) || (r->cgi_type == FASTCGI))
-        {
-            r->cgi.op.fcgi = FASTCGI_CONNECT;
-        }
-        else if (r->cgi_type == SCGI)
-        {
-            r->cgi.op.scgi = SCGI_CONNECT;
-        }
-        else
-        {
-            print_err(r, "<%s:%d> operation=%d, cgi_type=%s\n", __func__, __LINE__, r->operation, get_cgi_type(r->cgi_type));
-            r->err = -RS500;
-            end_response(r);
-        mtx_cgi.lock();
-            r = cgi_wait_list_end;
-        mtx_cgi.unlock();
-            continue;
-        }
-        //--------------------------
-    //mtx_thr.lock();
-        if (work_list_end)
-            work_list_end->next = r;
-        else
-            work_list_start = r;
-
-        r->prev = work_list_end;
-        r->next = NULL;
-        work_list_end = r;
-    //mtx_thr.unlock();
-    
-    mtx_cgi.lock();
-        ++cgi_work;
-        r = cgi_wait_list_end;
-    mtx_cgi.unlock();
-    }
 }

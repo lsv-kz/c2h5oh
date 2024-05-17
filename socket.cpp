@@ -347,7 +347,7 @@ int read_request_headers(Connect *req)
     if (n == 1) // empty line found
         return req->req.len;
     else if (n < 0) // error
-        return -1;
+        return n;
 
     return 0;
 }

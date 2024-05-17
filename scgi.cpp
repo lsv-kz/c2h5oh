@@ -60,6 +60,11 @@ int EventHandlerClass::scgi_create_connect(Connect *req)
         return req->fcgi.fd;
     }
 
+    return 0;
+}
+//----------------------------------------------------------------------
+int EventHandlerClass::scgi_create_params(Connect *req)
+{
     int i = 0;
     Param param;
     req->fcgi.vPar.clear();
@@ -215,10 +220,6 @@ int EventHandlerClass::scgi_create_connect(Connect *req)
         return -RS502;
     }
 
-    req->cgi.op.scgi = SCGI_PARAMS;
-    req->timeout = conf->TimeoutCGI;
-    req->sock_timer = 0;
-
     return 0;
 }
 //----------------------------------------------------------------------
@@ -285,12 +286,19 @@ void EventHandlerClass::scgi_worker(Connect* r)
 {
     if (r->cgi.op.scgi == SCGI_CONNECT)
     {
-        int ret = scgi_create_connect(r);
+        int ret = scgi_create_params(r);
         if (ret < 0)
         {
             r->err = ret;
             del_from_list(r);
             end_response(r);
+        }
+        else
+        {
+            r->cgi.op.scgi = SCGI_PARAMS;
+            r->timeout = conf->TimeoutCGI;
+            r->sock_timer = 0;
+            r->io_direct = TO_CGI;
         }
     }
     else if (r->cgi.op.scgi == SCGI_PARAMS)
@@ -299,10 +307,7 @@ void EventHandlerClass::scgi_worker(Connect* r)
         if (ret < 0)
         {
             if (ret == ERR_TRY_AGAIN)
-            {
-                print_err(r, "<%s:%d> Send param: ERR_TRY_AGAIN\n", __func__, __LINE__);
                 r->io_status = WAIT;
-            }
             else
             {
                 r->err = -RS502;

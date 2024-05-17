@@ -96,12 +96,13 @@ enum CGI_OPERATION { CGI_CREATE_PROC = 1, CGI_STDIN, CGI_READ_HTTP_HEADERS, CGI_
 enum SCGI_OPERATION { SCGI_CONNECT = 1, SCGI_PARAMS, SCGI_STDIN, SCGI_READ_HTTP_HEADERS, SCGI_SEND_HTTP_HEADERS, SCGI_SEND_ENTITY };
 
 union OPERATION { CGI_OPERATION cgi; FCGI_OPERATION fcgi; SCGI_OPERATION scgi;};
-
+//----------------------------------------------------------------------
+const int CGI_BUF_SIZE = 16384;
 struct Cgi
 {
     OPERATION op;
-    char buf[8 + 4096 + 8];
-    int  size_buf = 4096;
+    int  size_buf = CGI_BUF_SIZE;
+    char buf[CGI_BUF_SIZE + 16];
     long len_buf;
     long len_post;
     char *p;
@@ -404,6 +405,7 @@ class EventHandlerClass
     void get_info_from_header(Connect* r, const char* p);
     void fcgi_set_param(Connect *r);
     int fcgi_create_connect(Connect *r);
+    int fcgi_create_params(Connect *req);
     int fcgi_stdin(Connect *r);
     int fcgi_stdout(Connect *r);
     int fcgi_read_http_headers(Connect *r);
@@ -416,6 +418,7 @@ class EventHandlerClass
 
     int scgi_set_size_data(Connect* r);
     int scgi_create_connect(Connect *r);
+    int scgi_create_params(Connect *r);
     int scgi_set_param(Connect *r);
     void scgi_worker(Connect* r);
     int scgi_err(Connect *r);

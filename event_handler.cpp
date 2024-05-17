@@ -309,9 +309,11 @@ int EventHandlerClass::poll_worker()
                                 break;
                             case PHPFPM:
                             case FASTCGI:
-                                print_err(r, "<%s:%d> Error: events=0x%x(0x%x)\n", 
-                                            __func__, __LINE__, poll_fd[i].events, poll_fd[i].revents);
-                                if (r->cgi.op.fcgi <= FASTCGI_READ_HTTP_HEADERS)
+                                print_err(r, "<%s:%d> Error: events=0x%x(0x%x); %s\n", __func__, __LINE__, 
+                                            poll_fd[i].events, poll_fd[i].revents, get_fcgi_operation(r->cgi.op.fcgi));
+                                if (r->cgi.op.fcgi == FASTCGI_CONNECT)
+                                    r->err = -RS404;
+                                else if (r->cgi.op.fcgi <= FASTCGI_READ_HTTP_HEADERS)
                                     r->err = -RS502;
                                 else
                                     r->err = -1;
@@ -340,7 +342,9 @@ int EventHandlerClass::poll_worker()
                                 {
                                     print_err(r, "<%s:%d> Error: events=0x%x(0x%x)\n", 
                                             __func__, __LINE__, poll_fd[i].events, poll_fd[i].revents);
-                                    if (r->cgi.op.scgi <= SCGI_READ_HTTP_HEADERS)
+                                    if (r->cgi.op.scgi == SCGI_CONNECT)
+                                        r->err = -RS404;
+                                    else if (r->cgi.op.scgi <= SCGI_READ_HTTP_HEADERS)
                                         r->err = -RS502;
                                     else
                                         r->err = -1;
