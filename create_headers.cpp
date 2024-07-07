@@ -57,9 +57,7 @@ int create_response_headers(Connect *req)
         if (conf->TimeoutKeepAlive == 0)
             req->resp_headers.s << "Connection: close\r\n";
         else
-        {
             req->resp_headers.s << "Connection: " << (req->connKeepAlive == 0 ? "close" : "keep-alive") << "\r\n";
-        }
     }
 
     if (req->mode_send == CHUNK)

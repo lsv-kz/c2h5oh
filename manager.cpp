@@ -115,7 +115,7 @@ void end_response(Connect *r)
         {
             print_log(r);
         }
-        
+
         if ((r->Protocol == HTTPS) && (r->tls.ssl))
         {
     #ifdef TCP_CORK_

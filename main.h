@@ -78,7 +78,7 @@ enum { HTTP09 = 1, HTTP10, HTTP11, HTTP2 };
 enum PROTOCOL {HTTP = 1, HTTPS};
 enum MODE_SEND { NO_CHUNK, CHUNK, CHUNK_END };
 enum SOURCE_ENTITY { NO_ENTITY, FROM_FILE, FROM_DATA_BUFFER, MULTIPART_ENTITY, };
-enum OPERATION_TYPE { SSL_ACCEPT = 1, READ_REQUEST, SEND_RESP_HEADERS, SEND_ENTITY, DYN_PAGE, SSL_SHUTDOWN, };
+enum OPERATION_TYPE { SSL_ACCEPT = 1, READ_REQUEST, PREPARE_RESPONSE, SEND_RESP_HEADERS, SEND_ENTITY, DYN_PAGE, SSL_SHUTDOWN, CLOSE_CONNECT, };
 enum MULTIPART { SEND_HEADERS = 1, SEND_PART, SEND_END };
 enum IO_STATUS { WAIT = 1, WORK };
 
@@ -367,6 +367,8 @@ class EventHandlerClass
     int cgi_work;
     int close_thr;
     unsigned long num_request;
+
+    int num_all, num_again, max_work_conn;
 
     Connect *work_list_start;
     Connect *work_list_end;

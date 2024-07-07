@@ -150,16 +150,16 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
                 "\r\n"
                 "<!DOCTYPE html>\n"
                 "<html>\n"
-                " <head>\n"
-                "  <title>500 Internal Server Error</title>\n"
-                "  <meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">\n"
-                " </head>\n"
-                " <body>\n"
-                "  <h3>500 Internal Server Error</h3>\n"
-                "  <p>%s</p>\n"
-                "  <hr>\n"
-                "  %s\n"
-                " </body>\n"
+                "<head>\n"
+                "<title>500 Internal Server Error</title>\n"
+                "<meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">\n"
+                "</head>\n"
+                "<body>\n"
+                "<h3>500 Internal Server Error</h3>\n"
+                "<p>%s</p>\n"
+                "<hr>\n"
+                "%s\n"
+                "</body>\n"
                 "</html>", strerror(errno), get_time().c_str());
         fclose(stdout);
         exit(EXIT_FAILURE);
@@ -169,13 +169,13 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
                 "\r\n"
                 "<!DOCTYPE html>\n"
                 "<html>\n"
-                " <head>\n"
-                "  <title>500 Internal Server Error</title>\n"
-                "  <meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">\n"
-                " </head>\n"
-                " <body>\n"
-                "  <h3> 500 Internal Server Error</h3>\n"
-                " </body>\n"
+                "<head>\n"
+                "<title>500 Internal Server Error</title>\n"
+                "<meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">\n"
+                "</head>\n"
+                "<body>\n"
+                "<h3> 500 Internal Server Error</h3>\n"
+                "</body>\n"
                 "</html>";
         write(cgi_serv[1], err_msg, strlen(err_msg));
         exit(EXIT_FAILURE);
@@ -199,12 +199,12 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
             else
             {
                 r->io_direct = FROM_CLIENT;
-                r->io_status = WORK;
             }
         }
         else
         {
             cgi_set_status_readheaders(r);
+            r->io_status = WAIT;
         }
 
         r->tail = NULL;
@@ -372,7 +372,6 @@ int EventHandlerClass::cgi_stdin(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0
             else
             {
                 req->io_direct = FROM_CLIENT;
-                req->io_status = WORK;
             }
         }
     }
@@ -585,18 +584,7 @@ int EventHandlerClass::cgi_set_size_chunk(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::cgi_worker(Connect* r)
 {
-    if (r->cgi.op.cgi == CGI_CREATE_PROC)
-    {
-        int ret = cgi_create_proc(r);
-        if (ret < 0)
-        {
-            print_err(r, "<%s:%d> Error cgi_create_proc()=%d\n", __func__, __LINE__, ret);
-            r->err = ret;
-            del_from_list(r);
-            end_response(r);
-        }
-    }
-    else if (r->cgi.op.cgi == CGI_STDIN)
+    if (r->cgi.op.cgi == CGI_STDIN)
     {
         int ret = cgi_stdin(r);
         if (ret < 0)
@@ -607,7 +595,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
             {
                 r->err = -RS502;
                 del_from_list(r);
-                end_response(r);
             }
         }
     }
@@ -622,7 +609,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
             {
                 r->err = -RS502;
                 del_from_list(r);
-                end_response(r);
             }
         }
         else if (ret > 0)
@@ -632,7 +618,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
                 print_err(r, "<%s:%d> Error create_response_headers()\n", __func__, __LINE__);
                 r->err = -1;
                 del_from_list(r);
-                end_response(r);
             }
             else
             {
@@ -663,7 +648,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
                     close(r->cgi.from_script);
                     r->cgi.from_script = -1;
                     del_from_list(r);
-                    end_response(r);
                 }
             }
             else
@@ -677,7 +661,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
                         close(r->cgi.from_script);
                         r->cgi.from_script = -1;
                         del_from_list(r);
-                        end_response(r);
                     }
                     else
                     {
@@ -696,7 +679,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
                                 {
                                     r->err = -1;
                                     del_from_list(r);
-                                    end_response(r);
                                 }
                             }
                         }
@@ -719,7 +701,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
             r->req_hd.iReferer = MAX_HEADERS - 1;
             r->reqHdValue[r->req_hd.iReferer] = "Error send response headers";
             del_from_list(r);
-            end_response(r);
         }
     }
     else if (r->cgi.op.cgi == CGI_SEND_ENTITY)
@@ -733,13 +714,11 @@ void EventHandlerClass::cgi_worker(Connect* r)
             {
                 r->err = -1;
                 del_from_list(r);
-                end_response(r);
             }
         }
         else if (ret == 0)
         {
             del_from_list(r);
-            end_response(r);
         }
     }
     else
@@ -747,7 +726,6 @@ void EventHandlerClass::cgi_worker(Connect* r)
         print_err(r, "<%s:%d> ??? Error: CGI_OPERATION=%s\n", __func__, __LINE__, get_cgi_operation(r->cgi.op.cgi));
         r->err = -1;
         del_from_list(r);
-        end_response(r);
     }
 }
 //----------------------------------------------------------------------
@@ -790,11 +768,32 @@ mtx_cgi.lock();
             {
                 r->cgi.to_script = -1;
                 r->cgi.from_script = -1;
-                r->cgi.op.cgi = CGI_CREATE_PROC;
+                
+                int ret = cgi_create_proc(r);
+                if (ret < 0)
+                {
+                    print_err(r, "<%s:%d> Error cgi_create_proc()=%d\n", __func__, __LINE__, ret);
+                    r->err = ret;
+
+                    if (r->cgi.from_script > 0)
+                    {
+                        close(r->cgi.from_script);
+                        r->cgi.from_script = -1;
+                    }
+
+                    if (r->cgi.to_script > 0)
+                    {
+                        close(r->cgi.to_script);
+                        r->cgi.to_script = -1;
+                    }
+            
+                    kill_chld(r);
+                    end_response(r);
+                    continue;
+                }
             }
             else if ((r->cgi_type == PHPFPM) || (r->cgi_type == FASTCGI))
             {
-                r->cgi.op.fcgi = FASTCGI_CONNECT;
                 int ret = fcgi_create_connect(r);
                 if (ret < 0)
                 {
@@ -805,7 +804,6 @@ mtx_cgi.lock();
             }
             else if (r->cgi_type == SCGI)
             {
-                r->cgi.op.scgi = SCGI_CONNECT;
                 int ret = scgi_create_connect(r);
                 if (ret < 0)
                 {

@@ -359,8 +359,11 @@ int main(int argc, char *argv[])
     }
     cerr << "   pid="  << pid << "; uid=" << getuid() << "; gid=" << getgid() << "\n";
     cout << "   pid="  << pid << "; uid=" << getuid() << "; gid=" << getgid() << "\n";
-    cerr << "   NumCpuCores: " << thread::hardware_concurrency() << "\n   MaxAcceptConnections: " 
-         << conf->MaxAcceptConnections << "\n   SndBufSize: " << conf->SndBufSize << "\n";
+    cerr << "   NumCpuCores: " << thread::hardware_concurrency() 
+         << "\n   MaxAcceptConnections: " << conf->MaxAcceptConnections 
+         << "\n   SndBufSize: " << conf->SndBufSize 
+         << "\n   NumWorkThreads: " << conf->NumWorkThreads
+         << "\n   MaxWorkConnPerThr: " << conf->MaxWorkConnPerThr << "\n";
     //------------------------------------------------------------------
     for ( ; environ[0]; )
     {

@@ -183,6 +183,8 @@ const char *get_str_operation(OPERATION_TYPE n)
             return "SSL_ACCEPT";
         case READ_REQUEST:
             return "READ_REQUEST";
+        case PREPARE_RESPONSE:
+            return "PREPARE_RESPONSE";
         case SEND_RESP_HEADERS:
             return "SEND_RESP_HEADERS";
         case SEND_ENTITY:
@@ -191,6 +193,8 @@ const char *get_str_operation(OPERATION_TYPE n)
             return "DYN_PAGE";
         case SSL_SHUTDOWN:
             return "SSL_SHUTDOWN";
+        case CLOSE_CONNECT:
+            return "CLOSE_CONNECT";
     }
 
     return "?";

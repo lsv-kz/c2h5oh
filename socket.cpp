@@ -72,7 +72,7 @@ int create_server_socket(const Config *conf)
         close(sockfd);
         return -1;
     }
-
+/*
     struct linger l;
     l.l_onoff = 1;
     l.l_linger = 0;
@@ -80,7 +80,7 @@ int create_server_socket(const Config *conf)
     {
         print_err("<%s:%d> Error setsockopt(): %s\n", __func__, __LINE__, strerror(errno));
     }
-
+*/
     if (listen(sockfd, conf->ListenBacklog) == -1)
     {
         fprintf(stderr, "Error listen(): %s\n", strerror(errno));

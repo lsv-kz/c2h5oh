@@ -531,11 +531,6 @@ int read_conf_file(FILE *fconf)
         return -1;
     }
     //------------------------------------------------------------------
-    if (conf->MaxWorkConnPerThr <= 0)
-    {
-        c.MaxWorkConnPerThr = INT_MAX;
-    }
-    //------------------------------------------------------------------
     if (conf->MaxConnectionPerThr <= 0)
     {
         fprintf(stderr, "<%s:%d> Error config file: MaxConnectionPerThr=%d\n", __func__, __LINE__, conf->MaxConnectionPerThr);
@@ -553,6 +548,11 @@ int read_conf_file(FILE *fconf)
     {
         fprintf(stderr, "<%s:%d> Error config file: max_open_fd=%d, max_fd=%d\n", __func__, __LINE__, n, max_fd);
         return -1;
+    }
+    //------------------------------------------------------------------
+    if (conf->MaxWorkConnPerThr <= 0)
+    {
+        c.MaxWorkConnPerThr = conf->MaxConnectionPerThr;
     }
     //------------------------------------------------------------------
     if (conf->Protocol == HTTPS)

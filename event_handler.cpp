@@ -21,9 +21,10 @@ void EventHandlerClass::init(int n)
 {
     num_thr = n;
     num_request = 0;
-    close_thr = num_wait = num_work = stat_work = cgi_work = 0;
+    close_thr = num_wait = num_work = stat_work = cgi_work = num_again = 0;
     work_list_start = work_list_end = wait_list_start = wait_list_end = start_chunk = NULL;
     cgi_wait_list_start = cgi_wait_list_end = NULL;
+    max_work_conn = conf->MaxWorkConnPerThr;
 }
 //----------------------------------------------------------------------
 long EventHandlerClass::get_num_req()
@@ -95,6 +96,13 @@ void EventHandlerClass::del_from_list(Connect *r)
     }
     else if (!r->prev && !r->next)
         work_list_start = work_list_end = NULL;
+
+    if (r->operation == CLOSE_CONNECT)
+        close_connect(r);
+    else if (r->operation == PREPARE_RESPONSE)
+        push_resp_list(r);
+    else
+        end_response(r);
 }
 //----------------------------------------------------------------------
 void EventHandlerClass::add_work_list()
@@ -139,8 +147,8 @@ int EventHandlerClass::set_poll()
         {
             if ((t - r->sock_timer) >= r->timeout)
             {
-                print_err(r, "<%s:%d> Timeout=%ld\n", __func__, __LINE__, t - r->sock_timer);
-                del_from_list(r);
+                print_err(r, "<%s:%d> Timeout=%ld, %s\n", __func__, __LINE__, 
+                            t - r->sock_timer, get_str_operation(r->operation));
                 if (r->operation == DYN_PAGE)
                 {
                     if ((r->cgi_type == CGI) || (r->cgi_type == PHPCGI))
@@ -161,28 +169,23 @@ int EventHandlerClass::set_poll()
                         r->reqHdValue[r->req_hd.iReferer] = "Timeout";
                     }
 
-                    end_response(r);
+                    del_from_list(r);
                 }
                 else
                 {
                     if ((r->operation == SSL_ACCEPT) || 
                         (r->operation == SSL_SHUTDOWN))
                     {
-                        close_connect(r);
-                        //end_response(r);
+                        r->operation = CLOSE_CONNECT;
                     }
                     else if (r->operation > READ_REQUEST)
                     {
                         r->req_hd.iReferer = MAX_HEADERS - 1;
                         r->reqHdValue[r->req_hd.iReferer] = "Timeout";
-                        r->err = -1;
-                        end_response(r);
                     }
-                    else
-                    {
-                        r->err = -1;
-                        end_response(r);
-                    }
+
+                    r->err = -1;
+                    del_from_list(r);
                 }
             }
             else
@@ -191,12 +194,11 @@ int EventHandlerClass::set_poll()
                 {
                     r->err = -1;
                     del_from_list(r);
-                    end_response(r);
                 }
             }
         }
         
-        if ((num_work + num_wait) >= conf->MaxWorkConnPerThr)
+        if ((num_work + num_wait) >= max_work_conn) // TCP congestion avoidance
         {
             start_chunk = next;
             break;
@@ -234,6 +236,8 @@ int EventHandlerClass::poll_worker()
 
     int i = 0, all = ret + num_work;
     Connect *r = work_list_start, *next;
+    num_all = all;
+    num_again = 0;
     for ( ; (all > 0) && r; r = next)
     {
         next = r->next;
@@ -248,8 +252,8 @@ int EventHandlerClass::poll_worker()
             if (poll_fd[i].revents & POLLIN)
             {
                 --all;
-                if (r->io_direct == FROM_CLIENT)
-                    r->io_status = WORK;
+                //if (r->io_direct == FROM_CLIENT)
+                //    r->io_status = WORK;
                 choose_worker(r);
             }
             else if (poll_fd[i].revents == POLLOUT)
@@ -270,7 +274,6 @@ int EventHandlerClass::poll_worker()
                         r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
                         r->err = -1;
                         del_from_list(r);
-                        end_response(r);
                     }
                     else
                     {
@@ -292,7 +295,6 @@ int EventHandlerClass::poll_worker()
                                     else
                                     {
                                         del_from_list(r);
-                                        end_response(r);
                                     }
                                 }
                                 else
@@ -304,13 +306,12 @@ int EventHandlerClass::poll_worker()
                                     else
                                         r->err = -1;
                                     del_from_list(r);
-                                    end_response(r);
                                 }
                                 break;
                             case PHPFPM:
                             case FASTCGI:
                                 print_err(r, "<%s:%d> Error: events=0x%x(0x%x); %s\n", __func__, __LINE__, 
-                                            poll_fd[i].events, poll_fd[i].revents, get_fcgi_operation(r->cgi.op.fcgi));
+                                        poll_fd[i].events, poll_fd[i].revents, get_fcgi_operation(r->cgi.op.fcgi));
                                 if (r->cgi.op.fcgi == FASTCGI_CONNECT)
                                     r->err = -RS404;
                                 else if (r->cgi.op.fcgi <= FASTCGI_READ_HTTP_HEADERS)
@@ -318,7 +319,6 @@ int EventHandlerClass::poll_worker()
                                 else
                                     r->err = -1;
                                 del_from_list(r);
-                                end_response(r);
                                 break;
                             case SCGI:
                                 if ((r->cgi.op.scgi == SCGI_SEND_ENTITY) && (r->io_direct == FROM_CGI))
@@ -335,7 +335,6 @@ int EventHandlerClass::poll_worker()
                                     else
                                     {
                                         del_from_list(r);
-                                        end_response(r);
                                     }
                                 }
                                 else
@@ -349,14 +348,12 @@ int EventHandlerClass::poll_worker()
                                     else
                                         r->err = -1;
                                     del_from_list(r);
-                                    end_response(r);
                                 }
                                 break;
                             default:
                                 print_err(r, "<%s:%d> ??? Error: CGI_TYPE=%s\n", __func__, __LINE__, get_cgi_type(r->cgi_type));
                                 r->err = -1;
                                 del_from_list(r);
-                                end_response(r);
                                 break;
                         }
                     }
@@ -364,30 +361,34 @@ int EventHandlerClass::poll_worker()
                 else
                 {
                     print_err(r, "<%s:%d> Error: events=0x%x(0x%x)\n", __func__, __LINE__, poll_fd[i].events, poll_fd[i].revents);
-                    del_from_list(r);
                     if ((r->operation == SSL_ACCEPT) || 
                         (r->operation == SSL_SHUTDOWN))
                     {
-                        close_connect(r);
-                        //end_response(r);
+                        r->operation = CLOSE_CONNECT;
                     }
                     else if (r->operation > READ_REQUEST)
                     {
                         r->req_hd.iReferer = MAX_HEADERS - 1;
                         r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
-                        r->err = -1;
-                        end_response(r);
                     }
-                    else
-                    {
-                        r->err = -1;
-                        end_response(r);
-                    }
+
+                    r->err = -1;
+                    del_from_list(r);
                 }
             }
 
             ++i;
         }
+    }
+
+    if (num_again) // TCP congestion avoidance
+    {
+        if (num_all > num_again)
+            max_work_conn = num_all - num_again;
+    }
+    else
+    {
+        max_work_conn = conf->MaxWorkConnPerThr;
     }
 
     return i;
@@ -399,6 +400,7 @@ int EventHandlerClass::wait_conn()
     unique_lock<mutex> lk(mtx_thr);
         while ((!work_list_start) && (!wait_list_start) && (!cgi_wait_list_start) && (!close_thr))
         {
+            max_work_conn = conf->MaxWorkConnPerThr;
             cond_thr.wait(lk);
             start_chunk = work_list_start;
         }
@@ -412,7 +414,7 @@ int EventHandlerClass::wait_conn()
 void EventHandlerClass::push_cgi(Connect *r)
 {
     r->operation = DYN_PAGE;
-    r->io_status = WORK;
+    r->io_status = WAIT;
     r->respStatus = RS200;
     r->sock_timer = 0;
     r->prev = NULL;
@@ -551,7 +553,6 @@ int EventHandlerClass::send_headers(Connect *r)
             r->req_hd.iReferer = MAX_HEADERS - 1;
             r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
             del_from_list(r);
-            end_response(r);
             return -1;
         }
     }
@@ -598,20 +599,21 @@ void EventHandlerClass::worker(Connect *r)
             if (wr < 0)
             {
                 if (wr == ERR_TRY_AGAIN)
+                {
+                    ++num_again;
                     r->io_status = WAIT;
+                }
                 else
                 {
                     r->err = -1;
                     r->req_hd.iReferer = MAX_HEADERS - 1;
                     r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
                     del_from_list(r);
-                    end_response(r);
                 }
             }
             else if (wr == 0)
             {
                 del_from_list(r);
-                end_response(r);
             }
             else // (wr > 0)
                 r->sock_timer = 0;
@@ -641,7 +643,6 @@ void EventHandlerClass::worker(Connect *r)
                         r->req_hd.iReferer = MAX_HEADERS - 1;
                         r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
                         del_from_list(r);
-                        end_response(r);
                     }
                 }
                 else if (wr == 0)
@@ -661,7 +662,6 @@ void EventHandlerClass::worker(Connect *r)
                     if (r->resp_headers.len == 0)
                     {
                         del_from_list(r);
-                        end_response(r);
                     }
                 }
             }
@@ -679,13 +679,11 @@ void EventHandlerClass::worker(Connect *r)
                     r->req_hd.iReferer = MAX_HEADERS - 1;
                     r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
                     del_from_list(r);
-                    end_response(r);
                 }
             }
             else if (wr == 0)
             {
                 del_from_list(r);
-                end_response(r);
             }
             else
                 r->sock_timer = 0;
@@ -701,7 +699,6 @@ void EventHandlerClass::worker(Connect *r)
                 if (r->reqMethod == M_HEAD)
                 {
                     del_from_list(r);
-                    end_response(r);
                 }
                 else
                 {
@@ -710,7 +707,6 @@ void EventHandlerClass::worker(Connect *r)
                         if (r->html.len == 0)
                         {
                             del_from_list(r);
-                            end_response(r);
                         }
                         else
                             r->operation = SEND_ENTITY;
@@ -739,14 +735,13 @@ void EventHandlerClass::worker(Connect *r)
             {
                 r->err = ret;
                 del_from_list(r);
-                end_response(r);
             }
         }
         else if (ret > 0)
         {
             num_request++;
+            r->operation = PREPARE_RESPONSE;
             del_from_list(r);
-            push_resp_list(r);
         }
         else
         {
@@ -775,8 +770,8 @@ void EventHandlerClass::worker(Connect *r)
             else
             {
                 print_err(r, "<%s:%d> Error SSL_accept(): %s\n", __func__, __LINE__, ssl_strerror(r->tls.err));
+                r->operation = CLOSE_CONNECT;
                 del_from_list(r);
-                close_connect(r);
             }
         }
         else
@@ -807,8 +802,8 @@ void EventHandlerClass::worker(Connect *r)
             }
             else
             {
+                r->operation = CLOSE_CONNECT;
                 del_from_list(r);
-                close_connect(r);
             }
         }
         else
@@ -822,7 +817,6 @@ void EventHandlerClass::worker(Connect *r)
         print_err(r, "<%s:%d> ? operation=%s\n", __func__, __LINE__, get_str_operation(r->operation));
         r->err = -1;
         del_from_list(r);
-        end_response(r);
     }
 }
 //----------------------------------------------------------------------

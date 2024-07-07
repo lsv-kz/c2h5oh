@@ -99,44 +99,55 @@ void EventHandlerClass::fcgi_set_param(Connect *r)
     fcgi_set_header(r, FCGI_PARAMS);
 }
 //----------------------------------------------------------------------
-int EventHandlerClass::fcgi_create_connect(Connect *req)
+int EventHandlerClass::fcgi_create_connect(Connect *r)
 {
-    req->io_direct = TO_CGI;
-    if (req->reqMethod == M_POST)
+    r->io_direct = TO_CGI;
+    if (r->reqMethod == M_POST)
     {
-        if (req->req_hd.iReqContentType < 0)
+        if (r->req_hd.iReqContentType < 0)
         {
-            print_err(req, "<%s:%d> Content-Type \?\n", __func__, __LINE__);
+            print_err(r, "<%s:%d> Content-Type \?\n", __func__, __LINE__);
             return -RS400;
         }
 
-        if (req->req_hd.reqContentLength < 0)
+        if (r->req_hd.reqContentLength < 0)
         {
-            print_err(req, "<%s:%d> 411 Length Required\n", __func__, __LINE__);
+            print_err(r, "<%s:%d> 411 Length Required\n", __func__, __LINE__);
             return -RS411;
         }
 
-        if (req->req_hd.reqContentLength > conf->ClientMaxBodySize)
+        if (r->req_hd.reqContentLength > conf->ClientMaxBodySize)
         {
-            print_err(req, "<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, req->req_hd.reqContentLength);
+            print_err(r, "<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, r->req_hd.reqContentLength);
             return -RS413;
         }
     }
 
-    if (req->cgi_type == PHPFPM)
-        req->fcgi.fd = create_fcgi_socket(req, conf->PathPHP.c_str());
-    else if (req->cgi_type == FASTCGI)
-        req->fcgi.fd = get_sock_fcgi(req, req->scriptName.c_str());
+    if (r->cgi_type == PHPFPM)
+        r->fcgi.fd = create_fcgi_socket(r, conf->PathPHP.c_str());
+    else if (r->cgi_type == FASTCGI)
+        r->fcgi.fd = get_sock_fcgi(r, r->scriptName.c_str());
     else
     {
-        print_err(req, "<%s:%d> ? req->scriptType=%d\n", __func__, __LINE__, req->cgi_type);
+        print_err(r, "<%s:%d> ? req->scriptType=%d\n", __func__, __LINE__, r->cgi_type);
         return -RS500;
     }
 
-    if (req->fcgi.fd < 0)
+    if (r->fcgi.fd < 0)
     {
-        return req->fcgi.fd;
+        return r->fcgi.fd;
     }
+
+    r->fcgi.status = FCGI_READ_DATA;
+    r->fcgi.len_buf = 0;
+    r->fcgi.dataLen = r->cgi.len_buf = 8;
+    fcgi_set_header(r, FCGI_BEGIN_REQUEST);
+    char *p = r->cgi.buf + 8;
+    *(p++) = (unsigned char) ((FCGI_RESPONDER >> 8) & 0xff);
+    *(p++) = (unsigned char) (FCGI_RESPONDER        & 0xff);
+    memcpy(p, "\0\0\0\0\0\0", 6);
+    r->cgi.op.fcgi = FASTCGI_BEGIN;
+    r->io_status = WAIT;
 
     return 0;
 }
@@ -606,19 +617,7 @@ int EventHandlerClass::fcgi_read_header(Connect* r)
 //----------------------------------------------------------------------
 void EventHandlerClass::fcgi_worker(Connect* r)
 {
-    if (r->cgi.op.fcgi == FASTCGI_CONNECT)
-    {
-        r->fcgi.status = FCGI_READ_DATA;
-        r->fcgi.len_buf = 0;
-        r->fcgi.dataLen = r->cgi.len_buf = 8;
-        fcgi_set_header(r, FCGI_BEGIN_REQUEST);
-        char *p = r->cgi.buf + 8;
-        *(p++) = (unsigned char) ((FCGI_RESPONDER >> 8) & 0xff);
-        *(p++) = (unsigned char) (FCGI_RESPONDER        & 0xff);
-        memcpy(p, "\0\0\0\0\0\0", 6);
-        r->cgi.op.fcgi = FASTCGI_BEGIN;
-    }
-    else if (r->cgi.op.fcgi == FASTCGI_BEGIN)
+    if (r->cgi.op.fcgi == FASTCGI_BEGIN)
     {
         int ret = write_to_fcgi(r);
         if (ret < 0)
@@ -632,7 +631,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             {
                 r->err = -RS502;
                 del_from_list(r);
-                end_response(r);
             }
         }
         else if (ret > 0)
@@ -647,7 +645,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                 {
                     r->err = ret;
                     del_from_list(r);
-                    end_response(r);
                 }
             }
         }
@@ -700,7 +697,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             {
                 r->err = -RS502;
                 del_from_list(r);
-                end_response(r);
             }
         }
     }
@@ -715,7 +711,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             {
                 r->err = -RS502;
                 del_from_list(r);
-                end_response(r);
             }
         }
         else
@@ -737,7 +732,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                     else
                         r->err = -1;
                     del_from_list(r);
-                    end_response(r);
                 }
             }
             else if (ret < 8)
@@ -780,7 +774,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                         print_err(r, "<%s:%d> Error type=%d\n", __func__, __LINE__, r->fcgi.fcgi_type);
                         r->err = -1;
                         del_from_list(r);
-                        end_response(r);
                 }
             }
             return;
@@ -796,7 +789,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                 {
                     r->err = -1;
                     del_from_list(r);
-                    end_response(r);
                 }
             }
             return;
@@ -813,7 +805,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                 {
                     r->err = -RS502;
                     del_from_list(r);
-                    end_response(r);
                 }
             }
             else if (ret > 0)
@@ -823,7 +814,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                     print_err(r, "<%s:%d> Error create_response_headers()\n", __func__, __LINE__);
                     r->err = -1;
                     del_from_list(r);
-                    end_response(r);
                 }
                 else
                 {
@@ -868,7 +858,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                         r->req_hd.iReferer = MAX_HEADERS - 1;
                         r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
                         del_from_list(r);
-                        end_response(r);
                     }
                 }
                 else
@@ -880,7 +869,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                         if (r->reqMethod == M_HEAD)
                         {
                             del_from_list(r);
-                            end_response(r);
                         }
                         else
                         {
@@ -901,7 +889,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                                     {
                                         r->err = -1;
                                         del_from_list(r);
-                                        end_response(r);
                                     }
                                 }
                             }
@@ -930,13 +917,11 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                 {
                     r->err = -1;
                     del_from_list(r);
-                    end_response(r);
                 }
             }
             else if (ret == 0)
             {
                 del_from_list(r);
-                end_response(r);
             }
             else
                 r->sock_timer = 0;
@@ -946,7 +931,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             print_err(r, "<%s:%d> ??? Error: FCGI_OPERATION=%s\n", __func__, __LINE__, get_fcgi_operation(r->cgi.op.fcgi));
             r->err = -1;
             del_from_list(r);
-            end_response(r);
         }
     }
 }

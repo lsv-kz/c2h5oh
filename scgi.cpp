@@ -10,7 +10,7 @@ int EventHandlerClass::scgi_set_size_data(Connect* r)
     int i = 7;
     char *p = r->cgi.buf;
     p[i--] = ':';
-    
+
     for ( ; i >= 0; --i)
     {
         p[i] = (size % 10) + '0';
@@ -18,7 +18,7 @@ int EventHandlerClass::scgi_set_size_data(Connect* r)
         if (size == 0)
             break;
     }
-    
+
     if (size != 0)
         return -1;
 
@@ -29,191 +29,207 @@ int EventHandlerClass::scgi_set_size_data(Connect* r)
     return 0;
 }
 //----------------------------------------------------------------------
-int EventHandlerClass::scgi_create_connect(Connect *req)
+int EventHandlerClass::scgi_create_connect(Connect *r)
 {
-    req->io_direct = TO_CGI;
-    if (req->reqMethod == M_POST)
+    r->io_direct = TO_CGI;
+    if (r->reqMethod == M_POST)
     {
-        if (req->req_hd.iReqContentType < 0)
+        if (r->req_hd.iReqContentType < 0)
         {
-            print_err(req, "<%s:%d> Content-Type \?\n", __func__, __LINE__);
+            print_err(r, "<%s:%d> Content-Type \?\n", __func__, __LINE__);
             return -RS400;
         }
 
-        if (req->req_hd.reqContentLength < 0)
+        if (r->req_hd.reqContentLength < 0)
         {
-            print_err(req, "<%s:%d> 411 Length Required\n", __func__, __LINE__);
+            print_err(r, "<%s:%d> 411 Length Required\n", __func__, __LINE__);
             return -RS411;
         }
 
-        if (req->req_hd.reqContentLength > conf->ClientMaxBodySize)
+        if (r->req_hd.reqContentLength > conf->ClientMaxBodySize)
         {
-            print_err(req, "<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, req->req_hd.reqContentLength);
+            print_err(r, "<%s:%d> 413 Request entity too large: %lld\n", __func__, __LINE__, r->req_hd.reqContentLength);
             return -RS413;
         }
     }
 
-    req->fcgi.fd = get_sock_fcgi(req, req->scriptName.c_str());
-    if (req->fcgi.fd < 0)
+    r->fcgi.fd = get_sock_fcgi(r, r->scriptName.c_str());
+    if (r->fcgi.fd < 0)
     {
-        print_err(req, "<%s:%d> Error connect to scgi\n", __func__, __LINE__);
-        return req->fcgi.fd;
+        print_err(r, "<%s:%d> Error connect to scgi\n", __func__, __LINE__);
+        return r->fcgi.fd;
+    }
+
+    int ret = scgi_create_params(r);
+    if (ret < 0)
+        return ret;
+    else
+    {
+        r->cgi.op.scgi = SCGI_PARAMS;
+        r->timeout = conf->TimeoutCGI;
+        r->sock_timer = 0;
+        r->io_direct = TO_CGI;
+        r->io_status = WAIT;
     }
 
     return 0;
 }
 //----------------------------------------------------------------------
-int EventHandlerClass::scgi_create_params(Connect *req)
+int EventHandlerClass::scgi_create_params(Connect *r)
 {
     int i = 0;
     Param param;
-    req->fcgi.vPar.clear();
+    r->fcgi.vPar.clear();
 
-    param.name = "PATH";
-    param.val = "/bin:/usr/bin:/usr/local/bin";
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SERVER_SOFTWARE";
-    param.val = conf->ServerSoftware;
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SCGI";
-    param.val = "1";
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "DOCUMENT_ROOT";
-    param.val = conf->DocumentRoot;
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REMOTE_ADDR";
-    param.val = req->remoteAddr;
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REMOTE_PORT";
-    param.val = req->remotePort;
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "REQUEST_URI";
-    param.val = req->uri;
-    req->fcgi.vPar.push_back(param);
-    ++i;
-    
-    param.name = "DOCUMENT_URI";
-    param.val = req->decodeUri;
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    if (req->reqMethod == M_HEAD)
+    if (r->reqMethod == M_POST)
     {
-        param.name = "REQUEST_METHOD";
-        param.val = get_str_method(M_GET);
-        req->fcgi.vPar.push_back(param);
-        ++i;
-    }
-    else
-    {
-        param.name = "REQUEST_METHOD";
-        param.val = get_str_method(req->reqMethod);
-        req->fcgi.vPar.push_back(param);
-        ++i;
-    }
-
-    param.name = "SERVER_PROTOCOL";
-    param.val = get_str_http_prot(req->httpProt);
-    req->fcgi.vPar.push_back(param);
-    ++i;
-    
-    param.name = "SERVER_PORT";
-    param.val = conf->ServerPort;
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    if (req->req_hd.iHost >= 0)
-    {
-        param.name = "HTTP_HOST";
-        param.val = req->reqHdValue[req->req_hd.iHost];
-        req->fcgi.vPar.push_back(param);
-        ++i;
-    }
-
-    if (req->req_hd.iReferer >= 0)
-    {
-        param.name = "HTTP_REFERER";
-        param.val = req->reqHdValue[req->req_hd.iReferer];
-        req->fcgi.vPar.push_back(param);
-        ++i;
-    }
-
-    if (req->req_hd.iUserAgent >= 0)
-    {
-        param.name = "HTTP_USER_AGENT";
-        param.val = req->reqHdValue[req->req_hd.iUserAgent];
-        req->fcgi.vPar.push_back(param);
-        ++i;
-    }
-
-    param.name = "HTTP_CONNECTION";
-    if (req->connKeepAlive == 1)
-        param.val = "keep-alive";
-    else
-        param.val = "close";
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    param.name = "SCRIPT_NAME";
-    param.val = req->decodeUri;
-    req->fcgi.vPar.push_back(param);
-    ++i;
-
-    if (req->reqMethod == M_POST)
-    {
-        param.name = "CONTENT_TYPE";
-        param.val = req->reqHdValue[req->req_hd.iReqContentType];
-        req->fcgi.vPar.push_back(param);
-        ++i;
+        if (r->req_hd.iReqContentLength >= 0)
+            param.val = r->reqHdValue[r->req_hd.iReqContentLength];
+        else
+        {
+            fprintf(stderr, "<%s:%d> CONTENT_LENGTH ?\n", __func__, __LINE__);
+            return -RS400;
+        }
 
         param.name = "CONTENT_LENGTH";
-        param.val = req->reqHdValue[req->req_hd.iReqContentLength];
-        req->fcgi.vPar.push_back(param);
+        r->fcgi.vPar.push_back(param);
+        ++i;
+
+        if (r->req_hd.iReqContentType >=0)
+            param.val = r->reqHdValue[r->req_hd.iReqContentType];
+        else
+        {
+            fprintf(stderr, "<%s:%d> CONTENT_TYPE ?\n", __func__, __LINE__);
+            return -RS400;
+        }
+
+        param.name = "CONTENT_TYPE";
+        r->fcgi.vPar.push_back(param);
         ++i;
     }
     else
     {
         param.name = "CONTENT_LENGTH";
         param.val = "0";
-        req->fcgi.vPar.push_back(param);
+        r->fcgi.vPar.push_back(param);
         ++i;
         
         param.name = "CONTENT_TYPE";
         param.val = "";
-        req->fcgi.vPar.push_back(param);
+        r->fcgi.vPar.push_back(param);
         ++i;
     }
 
-    param.name = "QUERY_STRING";
-    if (req->sReqParam)
-        param.val = req->sReqParam;
-    else
-        param.val = "";
-    req->fcgi.vPar.push_back(param);
+    param.name = "PATH";
+    param.val = "/bin:/usr/bin:/usr/local/bin";
+    r->fcgi.vPar.push_back(param);
     ++i;
 
-    if (i != (int)req->fcgi.vPar.size())
+    param.name = "SERVER_SOFTWARE";
+    param.val = conf->ServerSoftware;
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "SCGI";
+    param.val = "1";
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "DOCUMENT_ROOT";
+    param.val = conf->DocumentRoot;
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "REMOTE_ADDR";
+    param.val = r->remoteAddr;
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "REMOTE_PORT";
+    param.val = r->remotePort;
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "REQUEST_URI";
+    param.val = r->uri;
+    r->fcgi.vPar.push_back(param);
+    ++i;
+    
+    param.name = "DOCUMENT_URI";
+    param.val = r->decodeUri;
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "REQUEST_METHOD";
+    param.val = get_str_method(r->reqMethod);
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "SERVER_PROTOCOL";
+    param.val = get_str_http_prot(r->httpProt);
+    r->fcgi.vPar.push_back(param);
+    ++i;
+    
+    param.name = "SERVER_PORT";
+    param.val = conf->ServerPort;
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    if (r->req_hd.iHost >= 0)
     {
-        print_err(req, "<%s:%d> Error: create fcgi param list\n", __func__, __LINE__);
+        param.name = "HTTP_HOST";
+        param.val = r->reqHdValue[r->req_hd.iHost];
+        r->fcgi.vPar.push_back(param);
+        ++i;
+    }
+
+    if (r->req_hd.iReferer >= 0)
+    {
+        param.name = "HTTP_REFERER";
+        param.val = r->reqHdValue[r->req_hd.iReferer];
+        r->fcgi.vPar.push_back(param);
+        ++i;
+    }
+
+    if (r->req_hd.iUserAgent >= 0)
+    {
+        param.name = "HTTP_USER_AGENT";
+        param.val = r->reqHdValue[r->req_hd.iUserAgent];
+        r->fcgi.vPar.push_back(param);
+        ++i;
+    }
+
+    param.name = "HTTP_CONNECTION";
+    if (r->connKeepAlive == 1)
+        param.val = "keep-alive";
+    else
+        param.val = "close";
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "SCRIPT_NAME";
+    param.val = r->decodeUri;
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    param.name = "QUERY_STRING";
+    if (r->sReqParam)
+        param.val = r->sReqParam;
+    else
+        param.val = "";
+    r->fcgi.vPar.push_back(param);
+    ++i;
+
+    if (i != (int)r->fcgi.vPar.size())
+    {
+        print_err(r, "<%s:%d> Error: create fcgi param list\n", __func__, __LINE__);
         return -1;
     }
 
-    req->fcgi.size_par = i;
-    req->fcgi.i_param = 0;
+    r->fcgi.size_par = i;
+    r->fcgi.i_param = 0;
 
-    int ret = scgi_set_param(req);
+    int ret = scgi_set_param(r);
     if (ret <= 0)
     {
         fprintf(stderr, "<%s:%d> Error scgi_set_param()\n", __func__, __LINE__);
@@ -284,24 +300,7 @@ int EventHandlerClass::scgi_set_param(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::scgi_worker(Connect* r)
 {
-    if (r->cgi.op.scgi == SCGI_CONNECT)
-    {
-        int ret = scgi_create_params(r);
-        if (ret < 0)
-        {
-            r->err = ret;
-            del_from_list(r);
-            end_response(r);
-        }
-        else
-        {
-            r->cgi.op.scgi = SCGI_PARAMS;
-            r->timeout = conf->TimeoutCGI;
-            r->sock_timer = 0;
-            r->io_direct = TO_CGI;
-        }
-    }
-    else if (r->cgi.op.scgi == SCGI_PARAMS)
+    if (r->cgi.op.scgi == SCGI_PARAMS)
     {
         int ret = write_to_fcgi(r);
         if (ret < 0)
@@ -312,7 +311,6 @@ void EventHandlerClass::scgi_worker(Connect* r)
             {
                 r->err = -RS502;
                 del_from_list(r);
-                end_response(r);
             }
 
             return;
@@ -361,7 +359,6 @@ void EventHandlerClass::scgi_worker(Connect* r)
             {
                 r->err = -RS502;
                 del_from_list(r);
-                end_response(r);
             }
         }
         else
@@ -380,7 +377,6 @@ void EventHandlerClass::scgi_worker(Connect* r)
                 {
                     r->err = -RS502;
                     del_from_list(r);
-                    end_response(r);
                 }
             }
             else if (ret > 0)
@@ -391,7 +387,6 @@ void EventHandlerClass::scgi_worker(Connect* r)
                     print_err(r, "<%s:%d> Error create_response_headers()\n", __func__, __LINE__);
                     r->err = -1;
                     del_from_list(r);
-                    end_response(r);
                 }
                 else
                 {
@@ -420,7 +415,6 @@ void EventHandlerClass::scgi_worker(Connect* r)
                         r->req_hd.iReferer = MAX_HEADERS - 1;
                         r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
                         del_from_list(r);
-                        end_response(r);
                     }
                 }
                 else
@@ -432,7 +426,6 @@ void EventHandlerClass::scgi_worker(Connect* r)
                         if (r->reqMethod == M_HEAD)
                         {
                             del_from_list(r);
-                            end_response(r);
                         }
                         else
                         {
@@ -451,7 +444,6 @@ void EventHandlerClass::scgi_worker(Connect* r)
                                     {
                                         r->err = -1;
                                         del_from_list(r);
-                                        end_response(r);
                                     }
                                 }
                             }
@@ -474,7 +466,6 @@ void EventHandlerClass::scgi_worker(Connect* r)
                 r->req_hd.iReferer = MAX_HEADERS - 1;
                 r->reqHdValue[r->req_hd.iReferer] = "Error send response headers";
                 del_from_list(r);
-                end_response(r);
             }
         }
         else if (r->cgi.op.scgi == SCGI_SEND_ENTITY)
@@ -488,13 +479,11 @@ void EventHandlerClass::scgi_worker(Connect* r)
                 {
                     r->err = -1;
                     del_from_list(r);
-                    end_response(r);
                 }
             }
             else if (ret == 0) // end SCGI_SEND_ENTITY
             {
                 del_from_list(r);
-                end_response(r);
             }
             else
                 r->sock_timer = 0;
@@ -504,7 +493,6 @@ void EventHandlerClass::scgi_worker(Connect* r)
             print_err(r, "<%s:%d> ??? Error: SCGI_OPERATION=%s\n", __func__, __LINE__, get_scgi_operation(r->cgi.op.scgi));
             r->err = -1;
             del_from_list(r);
-            end_response(r);
         }
     }
 }
