@@ -368,7 +368,7 @@ class EventHandlerClass
     int close_thr;
     unsigned long num_request;
 
-    int num_all, num_again, max_work_conn;
+    int num_all, num_eagain, max_work_conn;
 
     Connect *work_list_start;
     Connect *work_list_end;

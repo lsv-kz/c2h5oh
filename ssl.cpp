@@ -20,6 +20,7 @@ SSL_CTX *create_context()
 {
     const SSL_METHOD *method;
     method = TLS_server_method();
+    //method = TLSv1_2_client_method();
     return SSL_CTX_new(method);
 }
 //======================================================================

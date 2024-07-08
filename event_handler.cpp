@@ -21,7 +21,7 @@ void EventHandlerClass::init(int n)
 {
     num_thr = n;
     num_request = 0;
-    close_thr = num_wait = num_work = stat_work = cgi_work = num_again = 0;
+    close_thr = num_wait = num_work = stat_work = cgi_work = num_eagain = 0;
     work_list_start = work_list_end = wait_list_start = wait_list_end = start_chunk = NULL;
     cgi_wait_list_start = cgi_wait_list_end = NULL;
     max_work_conn = conf->MaxWorkConnPerThr;
@@ -197,8 +197,8 @@ int EventHandlerClass::set_poll()
                 }
             }
         }
-        
-        if ((num_work + num_wait) >= max_work_conn) // TCP congestion avoidance
+
+        if ((num_work + num_wait) >= max_work_conn) // congestion avoidance
         {
             start_chunk = next;
             break;
@@ -237,7 +237,7 @@ int EventHandlerClass::poll_worker()
     int i = 0, all = ret + num_work;
     Connect *r = work_list_start, *next;
     num_all = all;
-    num_again = 0;
+    num_eagain = 0;
     for ( ; (all > 0) && r; r = next)
     {
         next = r->next;
@@ -252,8 +252,6 @@ int EventHandlerClass::poll_worker()
             if (poll_fd[i].revents & POLLIN)
             {
                 --all;
-                //if (r->io_direct == FROM_CLIENT)
-                //    r->io_status = WORK;
                 choose_worker(r);
             }
             else if (poll_fd[i].revents == POLLOUT)
@@ -381,10 +379,10 @@ int EventHandlerClass::poll_worker()
         }
     }
 
-    if (num_again) // TCP congestion avoidance
+    if (num_eagain) // congestion avoidance
     {
-        if (num_all > num_again)
-            max_work_conn = num_all - num_again;
+        if (num_all > num_eagain)
+            max_work_conn = num_all - num_eagain;
     }
     else
     {
@@ -543,10 +541,7 @@ int EventHandlerClass::send_headers(Connect *r)
     if (wr < 0)
     {
         if (wr == ERR_TRY_AGAIN)
-        {
-            r->io_status = WAIT;
             return ERR_TRY_AGAIN;
-        }
         else
         {
             r->err = -1;
@@ -600,7 +595,7 @@ void EventHandlerClass::worker(Connect *r)
             {
                 if (wr == ERR_TRY_AGAIN)
                 {
-                    ++num_again;
+                    ++num_eagain;
                     r->io_status = WAIT;
                 }
                 else
@@ -629,6 +624,11 @@ void EventHandlerClass::worker(Connect *r)
                     if (r->resp_headers.len == 0)
                         r->mp.status = SEND_PART;
                 }
+                else if (wr == ERR_TRY_AGAIN)
+                {
+                    ++num_eagain;
+                    r->io_status = WAIT;
+                }
             }
             else if (r->mp.status == SEND_PART)
             {
@@ -636,7 +636,10 @@ void EventHandlerClass::worker(Connect *r)
                 if (wr < 0)
                 {
                     if (wr == ERR_TRY_AGAIN)
+                    {
+                        ++num_eagain;
                         r->io_status = WAIT;
+                    }
                     else
                     {
                         r->err = wr;
@@ -664,6 +667,11 @@ void EventHandlerClass::worker(Connect *r)
                         del_from_list(r);
                     }
                 }
+                else if (wr == ERR_TRY_AGAIN)
+                {
+                    ++num_eagain;
+                    r->io_status = WAIT;
+                }
             }
         }
         else if (r->source_entity == FROM_DATA_BUFFER)
@@ -672,7 +680,10 @@ void EventHandlerClass::worker(Connect *r)
             if (wr < 0)
             {
                 if (wr == ERR_TRY_AGAIN)
+                {
+                    ++num_eagain;
                     r->io_status = WAIT;
+                }
                 else
                 {
                     r->err = -1;
@@ -722,6 +733,11 @@ void EventHandlerClass::worker(Connect *r)
                     }
                 }
             }
+        }
+        else if (wr == ERR_TRY_AGAIN)
+        {
+            ++num_eagain;
+            r->io_status = WAIT;
         }
     }
     else if (r->operation == READ_REQUEST)
