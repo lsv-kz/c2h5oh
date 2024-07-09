@@ -368,8 +368,6 @@ class EventHandlerClass
     int close_thr;
     unsigned long num_request;
 
-    int num_all, num_eagain, max_work_conn;
-
     Connect *work_list_start;
     Connect *work_list_end;
 
@@ -379,7 +377,7 @@ class EventHandlerClass
     Connect *cgi_wait_list_start;
     Connect *cgi_wait_list_end;
 
-    Connect *start_chunk;
+    Connect *start_chunk, *end_chunk;
 
     int send_part_file(Connect *r);
     void del_from_list(Connect *r);

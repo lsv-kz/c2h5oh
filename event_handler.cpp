@@ -21,10 +21,9 @@ void EventHandlerClass::init(int n)
 {
     num_thr = n;
     num_request = 0;
-    close_thr = num_wait = num_work = stat_work = cgi_work = num_eagain = 0;
+    close_thr = num_wait = num_work = stat_work = cgi_work = 0;
     work_list_start = work_list_end = wait_list_start = wait_list_end = start_chunk = NULL;
     cgi_wait_list_start = cgi_wait_list_end = NULL;
-    max_work_conn = conf->MaxWorkConnPerThr;
 }
 //----------------------------------------------------------------------
 long EventHandlerClass::get_num_req()
@@ -134,7 +133,7 @@ int EventHandlerClass::set_poll()
     {
         next = r->next;
         if (next == NULL)
-            start_chunk = work_list_start;
+            end_chunk = work_list_start;
 
         if (r->sock_timer == 0)
             r->sock_timer = t;
@@ -198,9 +197,9 @@ int EventHandlerClass::set_poll()
             }
         }
 
-        if ((num_work + num_wait) >= max_work_conn) // congestion avoidance
+        if ((num_work + num_wait) >= conf->MaxWorkConnPerThr)
         {
-            start_chunk = next;
+            end_chunk = next;
             break;
         }
     }
@@ -235,9 +234,8 @@ int EventHandlerClass::poll_worker()
     }
 
     int i = 0, all = ret + num_work;
-    Connect *r = work_list_start, *next;
-    num_all = all;
-    num_eagain = 0;
+    Connect *r = start_chunk, *next;
+    start_chunk = end_chunk;
     for ( ; (all > 0) && r; r = next)
     {
         next = r->next;
@@ -379,16 +377,6 @@ int EventHandlerClass::poll_worker()
         }
     }
 
-    if (num_eagain) // congestion avoidance
-    {
-        if (num_all > num_eagain)
-            max_work_conn = num_all - num_eagain;
-    }
-    else
-    {
-        max_work_conn = conf->MaxWorkConnPerThr;
-    }
-
     return i;
 }
 //----------------------------------------------------------------------
@@ -398,7 +386,6 @@ int EventHandlerClass::wait_conn()
     unique_lock<mutex> lk(mtx_thr);
         while ((!work_list_start) && (!wait_list_start) && (!cgi_wait_list_start) && (!close_thr))
         {
-            max_work_conn = conf->MaxWorkConnPerThr;
             cond_thr.wait(lk);
             start_chunk = work_list_start;
         }
@@ -595,7 +582,7 @@ void EventHandlerClass::worker(Connect *r)
             {
                 if (wr == ERR_TRY_AGAIN)
                 {
-                    ++num_eagain;
+                    print_err(r, "<%s:%d> send_part_file: TRY_AGAIN\n", __func__, __LINE__);
                     r->io_status = WAIT;
                 }
                 else
@@ -626,7 +613,6 @@ void EventHandlerClass::worker(Connect *r)
                 }
                 else if (wr == ERR_TRY_AGAIN)
                 {
-                    ++num_eagain;
                     r->io_status = WAIT;
                 }
             }
@@ -637,7 +623,6 @@ void EventHandlerClass::worker(Connect *r)
                 {
                     if (wr == ERR_TRY_AGAIN)
                     {
-                        ++num_eagain;
                         r->io_status = WAIT;
                     }
                     else
@@ -669,7 +654,6 @@ void EventHandlerClass::worker(Connect *r)
                 }
                 else if (wr == ERR_TRY_AGAIN)
                 {
-                    ++num_eagain;
                     r->io_status = WAIT;
                 }
             }
@@ -681,7 +665,6 @@ void EventHandlerClass::worker(Connect *r)
             {
                 if (wr == ERR_TRY_AGAIN)
                 {
-                    ++num_eagain;
                     r->io_status = WAIT;
                 }
                 else
@@ -736,7 +719,6 @@ void EventHandlerClass::worker(Connect *r)
         }
         else if (wr == ERR_TRY_AGAIN)
         {
-            ++num_eagain;
             r->io_status = WAIT;
         }
     }
