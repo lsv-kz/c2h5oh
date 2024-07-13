@@ -22,7 +22,7 @@ void EventHandlerClass::init(int n)
     num_thr = n;
     num_request = 0;
     close_thr = num_wait = num_work = stat_work = cgi_work = 0;
-    work_list_start = work_list_end = wait_list_start = wait_list_end = start_chunk = NULL;
+    work_list_start = work_list_end = wait_list_start = wait_list_end = NULL;
     cgi_wait_list_start = cgi_wait_list_end = NULL;
 }
 //----------------------------------------------------------------------
@@ -33,9 +33,6 @@ long EventHandlerClass::get_num_req()
 //----------------------------------------------------------------------
 void EventHandlerClass::del_from_list(Connect *r)
 {
-    if (r == start_chunk)
-        start_chunk = r->next;
-
     if (r->operation == DYN_PAGE)
     {
         if ((r->cgi_type == CGI) || 
@@ -118,9 +115,6 @@ mtx_thr.lock();
         work_list_end = wait_list_end;
         wait_list_start = wait_list_end = NULL;
     }
-
-    if (start_chunk == NULL)
-        start_chunk = work_list_start;
 mtx_thr.unlock();
 }
 //----------------------------------------------------------------------
@@ -128,12 +122,10 @@ int EventHandlerClass::set_poll()
 {
     num_work = num_wait = 0;
     time_t t = time(NULL);
-    Connect *r = start_chunk, *next = NULL;
+    Connect *r = work_list_start, *next = NULL;
     for ( ; r; r = next)
     {
         next = r->next;
-        if (next == NULL)
-            end_chunk = work_list_start;
 
         if (r->sock_timer == 0)
             r->sock_timer = t;
@@ -196,12 +188,6 @@ int EventHandlerClass::set_poll()
                 }
             }
         }
-
-        if ((num_work + num_wait) >= conf->MaxWorkConnPerThr)
-        {
-            end_chunk = next;
-            break;
-        }
     }
 
     return 1;
@@ -234,8 +220,7 @@ int EventHandlerClass::poll_worker()
     }
 
     int i = 0, all = ret + num_work;
-    Connect *r = start_chunk, *next;
-    start_chunk = end_chunk;
+    Connect *r = work_list_start, *next = NULL;
     for ( ; (all > 0) && r; r = next)
     {
         next = r->next;
@@ -372,7 +357,6 @@ int EventHandlerClass::poll_worker()
                     del_from_list(r);
                 }
             }
-
             ++i;
         }
     }
@@ -387,7 +371,6 @@ int EventHandlerClass::wait_conn()
         while ((!work_list_start) && (!wait_list_start) && (!cgi_wait_list_start) && (!close_thr))
         {
             cond_thr.wait(lk);
-            start_chunk = work_list_start;
         }
     }
 

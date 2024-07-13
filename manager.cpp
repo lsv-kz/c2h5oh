@@ -308,7 +308,7 @@ void manager(int sockServer)
             continue;
         }
 /*
-        int opt = 10000000;  
+        int opt = ?;  
         int optlen = sizeof(opt);
         setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, (void *)&opt, optlen);
 */

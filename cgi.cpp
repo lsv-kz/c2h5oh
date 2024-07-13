@@ -199,6 +199,7 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
             else
             {
                 r->io_direct = FROM_CLIENT;
+                r->io_status = WORK;
             }
         }
         else
@@ -372,6 +373,7 @@ int EventHandlerClass::cgi_stdin(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0
             else
             {
                 req->io_direct = FROM_CLIENT;
+                req->io_status = WORK;
             }
         }
     }

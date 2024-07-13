@@ -61,11 +61,13 @@ void create_conf_file(const char *path)
     fprintf(f, "TcpCork              y # y/n \n");
     fprintf(f, "TcpNoDelay           y \n\n");
 
+    fprintf(f, "LingerOn          y # y/n \n");
+    fprintf(f, "LingerTime        10\n\n");
+
     fprintf(f, "SendFile             y\n");
     fprintf(f, "SndBufSize           32768\n\n");
 
-    fprintf(f, "MaxConnectionPerThr  768\n");
-    fprintf(f, "MaxWorkConnPerThr    0\n\n");
+    fprintf(f, "MaxConnectionPerThr  768\n\n");
 
     fprintf(f, "BalancedWorkThreads  y\n\n");
 
@@ -314,6 +316,10 @@ int read_conf_file(FILE *fconf)
                 c.TcpCork = (char)tolower(s2[0]);
             else if ((s1 == "TcpNoDelay") && is_bool(s2.c_str()))
                 c.TcpNoDelay = (char)tolower(s2[0]);
+            else if ((s1 == "LingerOn") && is_bool(s2.c_str()))
+                c.LingerOn = (char)tolower(s2[0]);
+            else if ((s1 == "LingerTime") && is_number(s2.c_str()))
+                c.LingerTime = atoi(s2.c_str());
             else if ((s1 == "ListenBacklog") && is_number(s2.c_str()))
                 s2 >> c.ListenBacklog;
             else if ((s1 == "SendFile") && is_bool(s2.c_str()))
@@ -322,8 +328,6 @@ int read_conf_file(FILE *fconf)
                 s2 >> c.SndBufSize;
             else if ((s1 == "MaxConnectionPerThr") && is_number(s2.c_str()))
                 s2 >> c.MaxConnectionPerThr;
-            else if ((s1 == "MaxWorkConnPerThr") && is_number(s2.c_str()))
-                s2 >> c.MaxWorkConnPerThr;
             else if ((s1 == "TimeoutPoll") && is_number(s2.c_str()))
                 s2 >> c.TimeoutPoll;
             else if (s1 == "DocumentRoot")
@@ -548,11 +552,6 @@ int read_conf_file(FILE *fconf)
     {
         fprintf(stderr, "<%s:%d> Error config file: max_open_fd=%d, max_fd=%d\n", __func__, __LINE__, n, max_fd);
         return -1;
-    }
-    //------------------------------------------------------------------
-    if (conf->MaxWorkConnPerThr <= 0)
-    {
-        c.MaxWorkConnPerThr = conf->MaxConnectionPerThr;
     }
     //------------------------------------------------------------------
     if (conf->Protocol == HTTPS)

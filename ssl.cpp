@@ -126,7 +126,6 @@ int ssl_read(Connect *req, char *buf, int len)// return: ERR_TRY_AGAIN | -1 | 0 
     else
     {
         int pend = SSL_pending(req->tls.ssl);
-        //printf("<%s> <%lu>%d/%d %d, SSL_pending=%d, %d\n", __func__, req->numReq, len, ret, req->io_status, pend, SSL_get_read_ahead(req->tls.ssl));
         if (pend)
             req->io_status = WORK;
         else

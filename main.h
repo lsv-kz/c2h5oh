@@ -152,6 +152,9 @@ public:
     char TcpCork;
     char TcpNoDelay;
 
+    char LingerOn;
+    int LingerTime;
+
     char SendFile;
     int SndBufSize;
 
@@ -160,7 +163,6 @@ public:
     int MaxAcceptConnections;
 
     int MaxConnectionPerThr;
-    int MaxWorkConnPerThr;
 
     int NumWorkThreads;
 
@@ -376,8 +378,6 @@ class EventHandlerClass
 
     Connect *cgi_wait_list_start;
     Connect *cgi_wait_list_end;
-
-    Connect *start_chunk, *end_chunk;
 
     int send_part_file(Connect *r);
     void del_from_list(Connect *r);

@@ -111,13 +111,14 @@ void print_config()
          << "\n\n   ListenBacklog          : " << conf->ListenBacklog
          << "\n   TcpCork                : " << conf->TcpCork
          << "\n   TcpNoDelay             : " << conf->TcpNoDelay
+         << "\n\n   LingerOn            : " << conf->LingerOn
+         << "\n   LingerTime          : " << conf->LingerTime
          << "\n\n   SendFile               : " << conf->SendFile
          << "\n   SndBufSize             : " << conf->SndBufSize
          << "\n\n   NumCpuCores            : " << thread::hardware_concurrency()
          << "\n   BalancedWorkThreads    : " << conf->BalancedWorkThreads
          << "\n   MaxAcceptConnections   : " << conf->MaxAcceptConnections
          << "\n   MaxConnectionPerThr    : " << conf->MaxConnectionPerThr
-         << "\n   MaxWorkConnPerThr      : " << conf->MaxWorkConnPerThr
          << "\n   NumWorkThreads         : " << conf->NumWorkThreads
          << "\n   MaxParseReqThreads     : " << conf->MaxParseReqThreads
          << "\n   MinParseReqThreads     : " << conf->MinParseReqThreads
@@ -359,11 +360,12 @@ int main(int argc, char *argv[])
     }
     cerr << "   pid="  << pid << "; uid=" << getuid() << "; gid=" << getgid() << "\n";
     cout << "   pid="  << pid << "; uid=" << getuid() << "; gid=" << getgid() << "\n";
-    cerr << "   NumCpuCores: " << thread::hardware_concurrency() 
-         << "\n   MaxAcceptConnections: " << conf->MaxAcceptConnections 
-         << "\n   SndBufSize: " << conf->SndBufSize 
+    cerr << "   NumCpuCores: " << thread::hardware_concurrency()
+         << "\n   MaxAcceptConnections: " << conf->MaxAcceptConnections
+         << "\n   SndBufSize: " << conf->SndBufSize
          << "\n   NumWorkThreads: " << conf->NumWorkThreads
-         << "\n   MaxWorkConnPerThr: " << conf->MaxWorkConnPerThr << "\n";
+         << "\n   LingerOn: " << conf->LingerOn
+         << "\n   LingerTime: " << conf->LingerTime << "\n";
     //------------------------------------------------------------------
     for ( ; environ[0]; )
     {
