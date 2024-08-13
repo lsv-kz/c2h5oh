@@ -14,9 +14,10 @@ const char *get_script_name(const char *name)
     return "";
 }
 //======================================================================
-void EventHandlerClass::kill_chld(Connect *req)
+void EventHandlerClass::kill_chld(Connect *r)
 {
-    kill(req->cgi.pid, SIGKILL);
+    if (r->cgi.pid > 0)
+        kill(r->cgi.pid, SIGKILL);
 }
 //----------------------------------------------------------------------
 int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)

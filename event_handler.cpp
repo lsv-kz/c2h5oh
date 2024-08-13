@@ -386,6 +386,7 @@ void EventHandlerClass::push_cgi(Connect *r)
     r->respStatus = RS200;
     r->sock_timer = 0;
     r->prev = NULL;
+    r->cgi.pid = -1;
 mtx_cgi.lock();
     r->next = cgi_wait_list_start;
     if (cgi_wait_list_start)

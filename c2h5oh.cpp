@@ -111,8 +111,8 @@ void print_config()
          << "\n\n   ListenBacklog          : " << conf->ListenBacklog
          << "\n   TcpCork                : " << conf->TcpCork
          << "\n   TcpNoDelay             : " << conf->TcpNoDelay
-         << "\n\n   LingerOn            : " << conf->LingerOn
-         << "\n   LingerTime          : " << conf->LingerTime
+         << "\n\n   LingerOn               : " << conf->LingerOn
+         << "\n   LingerTime             : " << conf->LingerTime
          << "\n\n   SendFile               : " << conf->SendFile
          << "\n   SndBufSize             : " << conf->SndBufSize
          << "\n\n   NumCpuCores            : " << thread::hardware_concurrency()
