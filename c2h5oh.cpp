@@ -367,11 +367,17 @@ int main(int argc, char *argv[])
          << "\n   LingerOn: " << conf->LingerOn
          << "\n   LingerTime: " << conf->LingerTime << "\n";
     //------------------------------------------------------------------
-    for ( ; environ[0]; )
+    for ( int i = 0; environ[i]; )
     {
         char *p, buf[512];
-        if ((p = (char*)memccpy(buf, environ[0], '=', strlen(environ[0]))))
+        if ((p = (char*)memccpy(buf, environ[i], '=', strlen(environ[i]))))
         {
+            /*if (strstr(environ[i], "DISPLAY") || strstr(environ[i], "XDG_RUNTIME_DIR"))
+            {
+                i++;
+                continue;
+            }*/
+
             *(p - 1) = 0;
             unsetenv(buf);
         }

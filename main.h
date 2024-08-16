@@ -59,6 +59,7 @@ const int  MAX_HEADERS = 25;
 const int  ERR_TRY_AGAIN = -1000;
 const int  LIMIT_WORK_THREADS = 16;
 const int  LIMIT_PARSE_REQ_THREADS = 128;
+const int  CONNECTION_OWNERSHIP_ENDED = 1;
 const char boundary[] = "---------a9b5r7a4c0a2d5a1b8r3a";
 
 enum {
@@ -387,7 +388,7 @@ class EventHandlerClass
     void set_part(Connect *r);
     int send_headers(Connect *r);
     void choose_worker(Connect *r);
-    int set_pollfd_array(Connect *r, int *i);
+    int set_pollfd_array(Connect *r, int i);
 
     void kill_chld(Connect *r);
     int cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv);
@@ -434,7 +435,7 @@ public:
     void init(int n);
     int wait_conn();
     void add_work_list();
-    int set_poll();
+    void set_poll();
     void cgi_add_work_list();
     int poll_worker();
 
@@ -508,11 +509,11 @@ void push_resp_list(Connect *r);
 void end_response(Connect *r);
 void close_connect(Connect *r);
 //----------------------------------------------------------------------
-void push_cgi(Connect *r);
+int push_cgi(Connect *r);
 void push_pollin_list(Connect *r);
-void push_send_file(Connect *r);
-void push_send_multipart(Connect *r);
-void push_send_html(Connect *r);
+int push_send_file(Connect *r);
+int push_send_multipart(Connect *r);
+int push_send_html(Connect *r);
 void push_ssl_shutdown(Connect *r);
 void event_handler(int);
 void close_work_threads();

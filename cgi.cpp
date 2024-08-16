@@ -17,7 +17,10 @@ const char *get_script_name(const char *name)
 void EventHandlerClass::kill_chld(Connect *r)
 {
     if (r->cgi.pid > 0)
-        kill(r->cgi.pid, SIGKILL);
+    {
+        if (waitpid(r->cgi.pid, NULL, WNOHANG) == 0)
+            kill(r->cgi.pid, SIGKILL);
+    }
 }
 //----------------------------------------------------------------------
 int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
@@ -587,7 +590,17 @@ int EventHandlerClass::cgi_set_size_chunk(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::cgi_worker(Connect* r)
 {
-    if (r->cgi.op.cgi == CGI_STDIN)
+    if (r->cgi.op.cgi == CGI_CREATE_PROC)
+    {
+        int ret = cgi_create_proc(r);
+        if (ret < 0)
+        {
+            print_err(r, "<%s:%d> Error cgi_create_proc()=%d\n", __func__, __LINE__, ret);
+            r->err = ret;
+            del_from_list(r);
+        }
+    }
+    else if (r->cgi.op.cgi == CGI_STDIN)
     {
         int ret = cgi_stdin(r);
         if (ret < 0)
@@ -667,6 +680,14 @@ void EventHandlerClass::cgi_worker(Connect* r)
                     }
                     else
                     {
+                        if (r->respStatus == RS204)
+                        {
+                            close(r->cgi.from_script);
+                            r->cgi.from_script = -1;
+                            del_from_list(r);
+                            return;
+                        }
+
                         r->cgi.op.cgi = CGI_SEND_ENTITY;
                         r->sock_timer = 0;
                         if (r->lenTail > 0)
@@ -756,83 +777,24 @@ int EventHandlerClass::cgi_err(Connect *r)
 void EventHandlerClass::cgi_add_work_list()
 {
 mtx_cgi.lock();
-    if ((cgi_work < conf->MaxCgiProc) && cgi_wait_list_end)
+    int n_max = conf->MaxCgiProc - cgi_work;
+    Connect *r = cgi_wait_list_end;
+
+    for ( ; (n_max > 0) && r; r = cgi_wait_list_end, --n_max)
     {
-        int n_max = conf->MaxCgiProc - cgi_work;
-        Connect *r = cgi_wait_list_end;
+        cgi_wait_list_end = r->prev;
+        if (cgi_wait_list_end == NULL)
+            cgi_wait_list_start = NULL;
+        //--------------------------
+        if (work_list_end)
+            work_list_end->next = r;
+        else
+            work_list_start = r;
 
-        for ( ; (n_max > 0) && r; r = cgi_wait_list_end, --n_max)
-        {
-            cgi_wait_list_end = r->prev;
-            if (cgi_wait_list_end == NULL)
-                cgi_wait_list_start = NULL;
-            //--------------------------
-            if ((r->cgi_type == CGI) || (r->cgi_type == PHPCGI))
-            {
-                r->cgi.to_script = -1;
-                r->cgi.from_script = -1;
-                
-                int ret = cgi_create_proc(r);
-                if (ret < 0)
-                {
-                    print_err(r, "<%s:%d> Error cgi_create_proc()=%d\n", __func__, __LINE__, ret);
-                    r->err = ret;
-
-                    if (r->cgi.from_script > 0)
-                    {
-                        close(r->cgi.from_script);
-                        r->cgi.from_script = -1;
-                    }
-
-                    if (r->cgi.to_script > 0)
-                    {
-                        close(r->cgi.to_script);
-                        r->cgi.to_script = -1;
-                    }
-            
-                    kill_chld(r);
-                    end_response(r);
-                    continue;
-                }
-            }
-            else if ((r->cgi_type == PHPFPM) || (r->cgi_type == FASTCGI))
-            {
-                int ret = fcgi_create_connect(r);
-                if (ret < 0)
-                {
-                    r->err = ret;
-                    end_response(r);
-                    continue;
-                }
-            }
-            else if (r->cgi_type == SCGI)
-            {
-                int ret = scgi_create_connect(r);
-                if (ret < 0)
-                {
-                    r->err = ret;
-                    end_response(r);
-                    continue;
-                }
-            }
-            else
-            {
-                print_err(r, "<%s:%d> operation=%d, cgi_type=%s\n", __func__, __LINE__, r->operation, get_cgi_type(r->cgi_type));
-                r->err = -1;
-                end_response(r);
-                continue;
-            }
-            //--------------------------
-            if (work_list_end)
-                work_list_end->next = r;
-            else
-                work_list_start = r;
-
-            r->prev = work_list_end;
-            r->next = NULL;
-            work_list_end = r;
-            ++cgi_work;
-        }
+        r->prev = work_list_end;
+        r->next = NULL;
+        work_list_end = r;
+        ++cgi_work;
     }
 mtx_cgi.unlock();
 }

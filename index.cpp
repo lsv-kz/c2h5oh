@@ -225,6 +225,5 @@ int index_dir(Connect *r, string& path)
         r->resp_headers.len = r->resp_headers.s.size();
     }
 
-    push_send_html(r);
-    return 1;
+    return push_send_html(r);
 }

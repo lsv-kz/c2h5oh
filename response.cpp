@@ -253,7 +253,7 @@ void parse_request_thread()
         }
 
         int ret = prepare_response(req);
-        if (ret == 1)
+        if (ret == CONNECTION_OWNERSHIP_ENDED)
         {
             if (exit_thread(NULL))
                 return;
@@ -317,9 +317,7 @@ int fastcgi(Connect* req, const char* uri)
     else
         return -RS404;
     req->scriptName = i->script_name.c_str();
-    push_cgi(req);
-
-    return 1;
+    return push_cgi(req);
 }
 //======================================================================
 int prepare_response(Connect *req)
@@ -345,15 +343,13 @@ int prepare_response(Connect *req)
         {
             req->scriptName = req->decodeUri;
             req->cgi_type = PHPFPM;
-            push_cgi(req);
-            return 1;
+            return push_cgi(req);
         }
         else if (conf->UsePHP == "php-cgi")
         {
             req->scriptName = req->decodeUri;
             req->cgi_type = PHPCGI;
-            push_cgi(req);
-            return 1;
+            return push_cgi(req);
         }
 
         return -1;
@@ -363,8 +359,7 @@ int prepare_response(Connect *req)
     {
         req->cgi_type = CGI;
         req->scriptName = req->decodeUri;
-        push_cgi(req);
-        return 1;
+        return push_cgi(req);
     }
     //------------------------------------------------------------------
     string path;
@@ -446,14 +441,12 @@ int prepare_response(Connect *req)
                     if (conf->UsePHP == "php-fpm")
                     {
                         req->cgi_type = PHPFPM;
-                        push_cgi(req);
-                        return 1;
+                        return push_cgi(req);
                     }
                     else if (conf->UsePHP == "php-cgi")
                     {
                         req->cgi_type = PHPCGI;
-                        push_cgi(req);
-                        return 1;
+                        return push_cgi(req);
                     }
 
                     return -1;
@@ -465,15 +458,13 @@ int prepare_response(Connect *req)
             {
                 req->cgi_type = CGI;
                 req->scriptName = "/cgi-bin/index.pl";
-                push_cgi(req);
-                return 1;
+                return push_cgi(req);
             }
             else if (conf->index_fcgi == 'y')
             {
                 req->cgi_type = FASTCGI;
                 req->scriptName = "/index.fcgi";
-                push_cgi(req);
-                return 1;
+                return push_cgi(req);
             }
 
             path.reserve(path.capacity() + 256);
@@ -560,9 +551,7 @@ int send_file(Connect *req)
     if (create_response_headers(req))
         return -1;
 
-    push_send_file(req);
-
-    return 1;
+    return push_send_file(req);
 }
 //======================================================================
 int create_multipart_head(Connect *req);
@@ -595,8 +584,7 @@ int send_multypart(Connect *req)
     if (create_response_headers(req))
         return -1;
 
-    push_send_multipart(req);
-    return 1;
+    return push_send_multipart(req);
 }
 //======================================================================
 int create_multipart_head(Connect *req)
@@ -624,6 +612,5 @@ int options(Connect *r)
     r->resp_headers.p = r->resp_headers.s.c_str();
     r->resp_headers.len = r->resp_headers.s.size();
     r->html.len = 0;
-    push_send_html(r);
-    return 1;
+    return push_send_html(r);
 }

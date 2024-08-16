@@ -300,7 +300,16 @@ int EventHandlerClass::scgi_set_param(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::scgi_worker(Connect* r)
 {
-    if (r->cgi.op.scgi == SCGI_PARAMS)
+    if (r->cgi.op.scgi == SCGI_CONNECT)
+    {
+        int ret = scgi_create_connect(r);
+        if (ret < 0)
+        {
+            r->err = ret;
+            del_from_list(r);
+        }
+    }
+    else if (r->cgi.op.scgi == SCGI_PARAMS)
     {
         int ret = write_to_fcgi(r);
         if (ret < 0)
@@ -429,6 +438,12 @@ void EventHandlerClass::scgi_worker(Connect* r)
                         }
                         else
                         {
+                            if (r->respStatus == RS204)
+                            {
+                                del_from_list(r);
+                                return;
+                            }
+
                             r->cgi.op.scgi = SCGI_SEND_ENTITY;
                             r->sock_timer = 0;
                             if (r->lenTail > 0)

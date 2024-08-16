@@ -29,22 +29,22 @@ int configure_context(SSL_CTX *ctx)
     if (SSL_CTX_use_certificate_file(ctx, "cert/cert.pem", SSL_FILETYPE_PEM) != 1)
     {
         fprintf(stderr, "<%s:%d> SSL_CTX_use_certificate_file failed\n", __func__, __LINE__);
-        return 0;
+        return -1;
     }
 
     if (SSL_CTX_use_PrivateKey_file(ctx, "cert/key.pem", SSL_FILETYPE_PEM) != 1)
     {
         fprintf(stderr, "<%s:%d> SSL_CTX_use_PrivateKey_file failed\n", __func__, __LINE__);
-        return 0;
+        return -1;
     }
 /*
     if (!SSL_CTX_check_private_key(ctx))
     {
         fprintf(stderr, "<%s:%d> SSL_CTX_check_private_key failed\n", __func__, __LINE__);
-        return 0;
+        return -1;
     }
 */
-    return 1;
+    return 0;
 }
 //======================================================================
 SSL_CTX *Init_SSL(void)
@@ -59,7 +59,7 @@ SSL_CTX *Init_SSL(void)
         exit(EXIT_FAILURE);
     }
 
-    if (!configure_context(ctx))
+    if (configure_context(ctx))
     {
         fprintf(stderr, "Error configure_context()\n");
         exit(EXIT_FAILURE);

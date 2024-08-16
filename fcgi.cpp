@@ -617,7 +617,16 @@ int EventHandlerClass::fcgi_read_header(Connect* r)
 //----------------------------------------------------------------------
 void EventHandlerClass::fcgi_worker(Connect* r)
 {
-    if (r->cgi.op.fcgi == FASTCGI_BEGIN)
+    if (r->cgi.op.fcgi == FASTCGI_CONNECT)
+    {
+        int ret = fcgi_create_connect(r);
+        if (ret < 0)
+        {
+            r->err = ret;
+            del_from_list(r);
+        }
+    }
+    else if (r->cgi.op.fcgi == FASTCGI_BEGIN)
     {
         int ret = write_to_fcgi(r);
         if (ret < 0)
@@ -872,6 +881,12 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                         }
                         else
                         {
+                            if (r->respStatus == RS204)
+                            {
+                                del_from_list(r);
+                                return;
+                            }
+
                             r->cgi.op.fcgi = FASTCGI_SEND_ENTITY;
                             r->sock_timer = 0;
                             if (r->lenTail > 0)

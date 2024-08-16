@@ -122,8 +122,7 @@ int send_message(Connect *r, const char *msg)
 
     r->resp_headers.p = r->resp_headers.s.c_str();
     r->resp_headers.len = r->resp_headers.s.size();
-    push_send_html(r);
-    return 1;
+    return push_send_html(r);
 }
 //======================================================================
 const char *status_resp(int st)
