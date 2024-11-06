@@ -4,7 +4,8 @@ using namespace std;
 //======================================================================
 void Connect::init()
 {
-    sRange = NULL;
+    sRange = NULL;;
+    sReqParam = NULL;
     //------------------------------------
     decodeUri[0] = 0;
     uri = NULL;

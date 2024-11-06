@@ -21,7 +21,7 @@ void EventHandlerClass::init(int n)
 {
     num_thr = n;
     num_request = 0;
-    close_thr = num_wait = num_work = stat_work = cgi_work = 0;
+    close_thr = num_wait = num_work = cgi_work = 0;
     work_list_start = work_list_end = wait_list_start = wait_list_end = NULL;
     cgi_wait_list_start = cgi_wait_list_end = NULL;
 }
@@ -68,7 +68,6 @@ void EventHandlerClass::del_from_list(Connect *r)
     }
     else
     {
-        --stat_work;
         if ((r->source_entity == FROM_FILE) || (r->source_entity == MULTIPART_ENTITY))
             close(r->fd);
     }
@@ -193,19 +192,19 @@ void EventHandlerClass::set_poll()
 //----------------------------------------------------------------------
 int EventHandlerClass::poll_worker()
 {
-    int ret = 0;
+    int ret_poll = 0;
     if (num_wait > 0)
     {
         int time_poll = conf->TimeoutPoll;
         if (num_work > 0)
             time_poll = 0;
-        ret = poll(poll_fd, num_wait, time_poll);
-        if (ret == -1)
+        ret_poll = poll(poll_fd, num_wait, time_poll);
+        if (ret_poll == -1)
         {
             print_err("<%s:%d> Error poll(): %s\n", __func__, __LINE__, strerror(errno));
             return -1;
         }
-        else if (ret == 0)
+        else if (ret_poll == 0)
         {
             if (num_work == 0)
                 return 0;
@@ -217,28 +216,32 @@ int EventHandlerClass::poll_worker()
             return 0;
     }
 
-    int i = 0, all = num_wait + num_work, n = 0;
+    int i = 0, all = ret_poll + num_work, n = 0;
     Connect *r = work_list_start, *next = NULL;
-    for ( ; (n < all) && r; r = next, ++n)
+    for ( ; (n < all) && r; r = next)
     {
         next = r->next;
 
         if (r->io_status == WORK)
         {
             choose_worker(r);
+            ++n;
         }
         else
         {
             if (poll_fd[i].revents & POLLIN)
             {
                 choose_worker(r);
+                ++n;
             }
             else if (poll_fd[i].revents == POLLOUT)
             {
                 choose_worker(r);
+                ++n;
             }
             else if (poll_fd[i].revents)
             {
+                ++n;
                 if (r->operation == DYN_PAGE)
                 {
                     if (poll_fd[i].fd == r->clientSocket)

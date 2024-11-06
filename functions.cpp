@@ -31,7 +31,7 @@ string log_time()
     time_t now = time(NULL);
 
     localtime_r(&now, &t);
-    strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S  %Z", &t);
+    strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S %Z", &t);
     return s;
 }
 //======================================================================
@@ -41,7 +41,7 @@ string log_time(time_t now)
     char s[40];
 
     localtime_r(&now, &t);
-    strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S  %Z", &t);
+    strftime(s, sizeof(s), "%d/%b/%Y:%H:%M:%S %Z", &t);
     return s;
 }
 //======================================================================
@@ -622,55 +622,77 @@ end:
     return "";
 }
 //======================================================================
-int clean_path(char *path)
+int clean_path(char *path, int len)
 {
-    unsigned int num_subfolder = 0;
-    const unsigned int max_subfolder = 20;
-    int arr[max_subfolder];
     int i = 0, j = 0;
     char ch;
+    char pch = ' ';
 
-    while ((ch = *(path + j)))
+    while ((ch = *(path + j)) && (len > 0))
     {
-        if (!memcmp(path + j, "/../", 4))
-        {
-            if (num_subfolder)
-                i = arr[--num_subfolder];
-            else
-                return -1;
-            j += 3;
-        }
-        else if (!memcmp(path + j, "//", 2))
-            j += 1;
-        else if (!memcmp(path + j, "/./", 3))
-            j += 2;
-        else if (!memcmp(path + j, ".\0", 2))
-            break;
-        else if (!memcmp(path + j, "/..\0", 4))
-        {
-            if (num_subfolder)
-            {
-                i = arr[--num_subfolder];
-                i++;
-                break;
-            }
-            else
-                return -1;
-        }
-        else
+        if (pch == '/')
         {
             if (ch == '/')
             {
-                if (num_subfolder < max_subfolder)
-                    arr[num_subfolder++] = i;
-                else
-                    return -1;
+                --len;
+                ++j;
+                continue;
             }
-            
-            *(path + i) = ch;
-            ++i;
-            ++j;
+
+            switch (len)
+            {
+                case 1:
+                    if (ch == '.')
+                    {
+                        --len;
+                        ++j;
+                        continue;
+                    }
+                    break;
+                case 2:
+                    if (!memcmp(path + j, "..", 2))
+                    {
+                        len -= 2;
+                        j += 2;
+                        continue;
+                    }
+                    else if (!memcmp(path + j, "./", 2))
+                    {
+                        len -= 2;
+                        j += 2;
+                        continue;
+                    }
+                    break;
+                case 3:
+                    if ((!memcmp(path + j, "../", 3)) || (!memcmp(path + j, "./.", 3)))
+                    {
+                        len -= 3;
+                        j += 3;
+                        continue;
+                    }
+                    break;
+                default:
+                    if (!memcmp(path + j, "../", 3))
+                    {
+                        len -= 3;
+                        j += 3;
+                        continue;
+                    }
+                    else if (!memcmp(path + j, "./", 2))
+                    {
+                        len -= 2;
+                        j += 2;
+                        continue;
+                    }
+                    break;
+            }
         }
+
+        *(path + i) = ch;
+        ++i;
+        ++j;
+        --len;
+        pch = ch;
     }
     
     *(path + i) = 0;

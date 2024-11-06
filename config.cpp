@@ -408,7 +408,7 @@ int read_conf_file(FILE *fconf)
                     }
                 }
 
-                if (ss.str() != "}")
+                if (ss != "}")
                 {
                     fprintf(stderr, "<%s:%d> Error not found \"}\", line <%d>\n", __func__, __LINE__, line_);
                     return -1;
@@ -431,7 +431,7 @@ int read_conf_file(FILE *fconf)
                     create_fcgi_list(&c.fcgi_list, s1, s2, FASTCGI);
                 }
 
-                if (ss.str() != "}")
+                if (ss != "}")
                 {
                     fprintf(stderr, "<%s:%d> Error not found \"}\", line <%d>\n", __func__, __LINE__, line_);
                     return -1;
@@ -454,7 +454,7 @@ int read_conf_file(FILE *fconf)
                     create_fcgi_list(&c.fcgi_list, s1, s2, SCGI);
                 }
 
-                if (ss.str() != "}")
+                if (ss != "}")
                 {
                     fprintf(stderr, "<%s:%d> Error not found \"}\", line <%d>\n", __func__, __LINE__, line_);
                     return -1;

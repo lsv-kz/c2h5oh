@@ -366,7 +366,6 @@ class EventHandlerClass
 
     int num_thr;
     int num_wait, num_work;
-    int stat_work;
     int cgi_work;
     int close_thr;
     unsigned long num_request;
@@ -491,7 +490,7 @@ const char *get_scgi_operation(SCGI_OPERATION n);
 const char *get_cgi_type(CGI_TYPE n);
 const char *get_cgi_dir(DIRECT n);
 
-int clean_path(char *path);
+int clean_path(char *path, int len);
 const char *content_type(const char *s);
 
 const char *base_name(const char *path);

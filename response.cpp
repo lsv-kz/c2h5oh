@@ -203,7 +203,8 @@ void parse_request_thread()
         else
             req->sReqParam = NULL;
 
-        if (decode(req->uri, req->uriLen, req->decodeUri, sizeof(req->decodeUri)) <= 0)
+        int len = decode(req->uri, req->uriLen, req->decodeUri, sizeof(req->decodeUri));
+        if (len <= 0)
         {
             print_err(req, "<%s:%d> Error: decode URI\n", __func__, __LINE__);
             req->err = -RS404;
@@ -212,7 +213,7 @@ void parse_request_thread()
             continue;
         }
 
-        if (clean_path(req->decodeUri) <= 0)
+        if (clean_path(req->decodeUri, len) <= 0)
         {
             print_err(req, "<%s:%d> Error URI=%s\n", __func__, __LINE__, req->decodeUri);
             req->lenDecodeUri = strlen(req->decodeUri);
