@@ -168,7 +168,8 @@ int index_dir(Connect *r, string& path)
 {
     DIR *dir;
     struct dirent *dirbuf;
-    int maxNumFiles = 1024, numFiles = 0;
+    const int maxNumFiles = 1024;
+    int numFiles = 0;
     char *list[maxNumFiles];
 
     path += '/';

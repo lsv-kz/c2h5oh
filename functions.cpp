@@ -624,13 +624,14 @@ end:
 //======================================================================
 int clean_path(char *path, int len)
 {
-    int i = 0, j = 0;
+    int i = 0, j = 0, level_dir = 0;
     char ch;
-    char pch = ' ';
+    char prev_ch = '\0';
+    int index_slash[64] = {0};
 
     while ((ch = *(path + j)) && (len > 0))
     {
-        if (pch == '/')
+        if (prev_ch == '/')
         {
             if (ch == '/')
             {
@@ -652,9 +653,18 @@ int clean_path(char *path, int len)
                 case 2:
                     if (!memcmp(path + j, "..", 2))
                     {
-                        len -= 2;
-                        j += 2;
-                        continue;
+                        if (level_dir > 1)
+                        {
+                            j += 2;
+                            len -= 2;
+                            --level_dir;
+                            i = index_slash[level_dir];
+                            continue;
+                        }
+                        else
+                        {
+                            return -RS400;
+                        }
                     }
                     else if (!memcmp(path + j, "./", 2))
                     {
@@ -664,19 +674,54 @@ int clean_path(char *path, int len)
                     }
                     break;
                 case 3:
-                    if ((!memcmp(path + j, "../", 3)) || (!memcmp(path + j, "./.", 3)))
+                    if (!memcmp(path + j, "../", 3))
+                    {
+                        if (level_dir > 1)
+                        {
+                            j += 3;
+                            len -= 3;
+                            --level_dir;
+                            i = index_slash[level_dir];
+                            continue;
+                        }
+                        else
+                        {
+                            return -RS400;
+                        }
+                    }
+                    else if (!memcmp(path + j, "./.", 3))
                     {
                         len -= 3;
                         j += 3;
+                        continue;
+                    }
+                    else if (!memcmp(path + j, ".//", 3))
+                    {
+                        len -= 3;
+                        j += 3;
+                        continue;
+                    }
+                    else if (!memcmp(path + j, "...", 3))
+                    {
+                        return -RS404;
                         continue;
                     }
                     break;
                 default:
                     if (!memcmp(path + j, "../", 3))
                     {
-                        len -= 3;
-                        j += 3;
-                        continue;
+                        if (level_dir > 1)
+                        {
+                            j += 3;
+                            len -= 3;
+                            --level_dir;
+                            i = index_slash[level_dir];
+                            continue;
+                        }
+                        else
+                        {
+                            return -RS400;
+                        }
                     }
                     else if (!memcmp(path + j, "./", 2))
                     {
@@ -684,7 +729,10 @@ int clean_path(char *path, int len)
                         j += 2;
                         continue;
                     }
-                    break;
+                    else if (ch == '.')
+                    {
+                        return -RS404;
+                    }
             }
         }
 
@@ -692,7 +740,14 @@ int clean_path(char *path, int len)
         ++i;
         ++j;
         --len;
-        pch = ch;
+        prev_ch = ch;
+        if (ch == '/')
+        {
+            if (level_dir >= (int)(sizeof(index_slash)/sizeof(int)))
+                return -RS404;
+            ++level_dir;
+            index_slash[level_dir] = i;
+        }
     }
     
     *(path + i) = 0;
