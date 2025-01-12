@@ -351,21 +351,27 @@ int main(int argc, char *argv[])
 
     cout << "\n[" << get_time().c_str() << "] - server \"" << conf->ServerSoftware.c_str()
          << "\" run, port: " << conf->ServerPort.c_str()
-         << "\n   hardware_concurrency = " << thread::hardware_concurrency() << "\n";
+         << "\nhardware_concurrency = " << thread::hardware_concurrency() << "\n";
     if (conf->Protocol == HTTPS)
     {
         SSL  *ssl = SSL_new(conf->ctx);
         cout << "   SSL version: " << SSL_get_version(ssl) << "\n";
         SSL_free(ssl);
     }
-    cerr << "   pid="  << pid << "; uid=" << getuid() << "; gid=" << getgid() << "\n";
-    cout << "   pid="  << pid << "; uid=" << getuid() << "; gid=" << getgid() << "\n";
-    cerr << "   NumCpuCores: " << thread::hardware_concurrency()
+
+    pid_t gid = getgid();
+    pid_t uid = getuid();
+    cout << "pid="  << pid << "; uid=" << uid << "; gid=" << gid << "\n";
+    cerr << "   pid="  << pid << "; uid=" << uid << "; gid=" << gid
+         << "\n   NumCpuCores: " << thread::hardware_concurrency()
          << "\n   MaxAcceptConnections: " << conf->MaxAcceptConnections
          << "\n   SndBufSize: " << conf->SndBufSize
          << "\n   NumWorkThreads: " << conf->NumWorkThreads
          << "\n   LingerOn: " << conf->LingerOn
-         << "\n   LingerTime: " << conf->LingerTime << "\n";
+         << "\n   LingerTime: " << conf->LingerTime
+         << "\n   size Config: " << sizeof(Config)
+         << "\n   size Connect: " << sizeof(Connect)
+         << "\n   size EventHandlerClass: " << sizeof(EventHandlerClass) << "\n";
     //------------------------------------------------------------------
     for ( int i = 0; environ[i]; )
     {

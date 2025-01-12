@@ -14,16 +14,47 @@ static EventHandlerClass *event_handler_cl;
 //======================================================================
 EventHandlerClass::~EventHandlerClass()
 {
-    printf("<%s:%d> **** %d ****\n", __func__, __LINE__, num_thr);
+    print_err("<%s:%d> thread %d, all requests %lu\n", __func__, __LINE__, num_thr, num_request);
+    delete [] poll_fd;
+#if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
+    if (conf->SendFile != 'y')
+#endif
+        if (snd_buf)
+            delete [] snd_buf;
+}
+//----------------------------------------------------------------------
+EventHandlerClass::EventHandlerClass()
+{
+    num_request = 0;
+    close_thr = num_wait = num_work = cgi_work = 0;
+    work_list_start = work_list_end = wait_list_start = wait_list_end = NULL;
+    cgi_wait_list_start = cgi_wait_list_end = NULL;
+    size_buf = conf->SndBufSize;
+    snd_buf = NULL;
+    
+#if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
+    if (conf->SendFile != 'y')
+#endif
+    {
+        snd_buf = new (nothrow) char [size_buf];
+        if (!snd_buf)
+        {
+            print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+            exit(1);
+        }
+    }
+
+    poll_fd = new(nothrow) struct pollfd [conf->MaxConnectionPerThr];
+    if (!poll_fd)
+    {
+        print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+        exit(1);
+    }
 }
 //----------------------------------------------------------------------
 void EventHandlerClass::init(int n)
 {
     num_thr = n;
-    num_request = 0;
-    close_thr = num_wait = num_work = cgi_work = 0;
-    work_list_start = work_list_end = wait_list_start = wait_list_end = NULL;
-    cgi_wait_list_start = cgi_wait_list_end = NULL;
 }
 //----------------------------------------------------------------------
 long EventHandlerClass::get_num_req()
@@ -33,10 +64,13 @@ long EventHandlerClass::get_num_req()
 //----------------------------------------------------------------------
 void EventHandlerClass::del_from_list(Connect *r)
 {
+//print_err(r, "<%s> resp_headers.s: %u, hdrs: %u, html: %u, scriptName: %u, cgi.vPar: %u\n", __func__,
+//    r->resp_headers.s.capacity(), r->hdrs.capacity(), r->html.s.capacity(), r->cgi.scriptName.capacity(), r->cgi.vPar.size());
+
     if (r->operation == DYN_PAGE)
     {
-        if ((r->cgi_type == CGI) || 
-            (r->cgi_type == PHPCGI))
+        if ((r->cgi.cgi_type == CGI) || 
+            (r->cgi.cgi_type == PHPCGI))
         {
             if (r->cgi.from_script > 0)
             {
@@ -52,24 +86,34 @@ void EventHandlerClass::del_from_list(Connect *r)
 
             kill_chld(r);
         }
-        else if ((r->cgi_type == PHPFPM) || 
-                (r->cgi_type == FASTCGI) ||
-                (r->cgi_type == SCGI))
+        else if ((r->cgi.cgi_type == PHPFPM) || (r->cgi.cgi_type == FASTCGI))
         {
-            if (r->fcgi.fd > 0)
+            if (r->cgi.fd > 0)
             {
-                shutdown(r->fcgi.fd, SHUT_RDWR);
-                close(r->fcgi.fd);
+                shutdown(r->cgi.fd, SHUT_RDWR);
+                close(r->cgi.fd);
+            }
+        }
+        else if (r->cgi.cgi_type == SCGI)
+        {
+            if (r->cgi.fd > 0)
+            {
+                shutdown(r->cgi.fd, SHUT_RDWR);
+                close(r->cgi.fd);
             }
         }
 
-        r->scriptName = "";
+        r->cgi.scriptName.clear();
         --cgi_work;
     }
     else
     {
         if ((r->source_entity == FROM_FILE) || (r->source_entity == MULTIPART_ENTITY))
             close(r->fd);
+        else if (r->source_entity == FROM_DATA_BUFFER)
+        {
+            r->html.s.clear();
+        }
     }
 
     if (r->prev && r->next)
@@ -92,10 +136,13 @@ void EventHandlerClass::del_from_list(Connect *r)
 
     if (r->operation == CLOSE_CONNECT)
         close_connect(r);
-    else if (r->operation == PREPARE_RESPONSE)
+    else if (r->operation == RESPONSE_PREPARE)
         push_resp_list(r);
     else
+    {
+        r->resp_headers.s.clear();
         end_response(r);
+    }
 }
 //----------------------------------------------------------------------
 void EventHandlerClass::add_work_list()
@@ -139,15 +186,15 @@ void EventHandlerClass::set_poll()
                             t - r->sock_timer, get_str_operation(r->operation));
                 if (r->operation == DYN_PAGE)
                 {
-                    if ((r->cgi_type == CGI) || (r->cgi_type == PHPCGI))
+                    if ((r->cgi.cgi_type == CGI) || (r->cgi.cgi_type == PHPCGI))
                         r->err = cgi_err(r);
-                    else if ((r->cgi_type == PHPFPM) || (r->cgi_type == FASTCGI))
+                    else if ((r->cgi.cgi_type == PHPFPM) || (r->cgi.cgi_type == FASTCGI))
                         r->err = fcgi_err(r);
-                    else if (r->cgi_type == SCGI)
+                    else if (r->cgi.cgi_type == SCGI)
                         r->err = scgi_err(r);
                     else
                     {
-                        print_err(r, "<%s:%d> cgi_type=%s\n", __func__, __LINE__, get_cgi_type(r->cgi_type));
+                        print_err(r, "<%s:%d> cgi_type=%s\n", __func__, __LINE__, get_cgi_type(r->cgi.cgi_type));
                         r->err = -1;
                     }
 
@@ -178,9 +225,7 @@ void EventHandlerClass::set_poll()
             }
             else
             {
-                if (set_pollfd_array(r, num_wait) == 0)
-                    ++num_wait;
-                else
+                if (set_pollfd_array(r, &num_wait))
                 {
                     r->err = -1;
                     del_from_list(r);
@@ -224,20 +269,20 @@ int EventHandlerClass::poll_worker()
 
         if (r->io_status == WORK)
         {
-            choose_worker(r);
             ++n;
+            choose_worker(r);
         }
         else
         {
             if (poll_fd[i].revents & POLLIN)
             {
-                choose_worker(r);
                 ++n;
+                choose_worker(r);
             }
             else if (poll_fd[i].revents == POLLOUT)
             {
-                choose_worker(r);
                 ++n;
+                choose_worker(r);
             }
             else if (poll_fd[i].revents)
             {
@@ -255,7 +300,7 @@ int EventHandlerClass::poll_worker()
                     }
                     else
                     {
-                        switch (r->cgi_type)
+                        switch (r->cgi.cgi_type)
                         {
                             case CGI:
                             case PHPCGI:
@@ -290,9 +335,7 @@ int EventHandlerClass::poll_worker()
                             case FASTCGI:
                                 print_err(r, "<%s:%d> Error: events=0x%x(0x%x); %s\n", __func__, __LINE__, 
                                         poll_fd[i].events, poll_fd[i].revents, get_fcgi_operation(r->cgi.op.fcgi));
-                                if (r->cgi.op.fcgi == FASTCGI_CONNECT)
-                                    r->err = -RS404;
-                                else if (r->cgi.op.fcgi <= FASTCGI_READ_HTTP_HEADERS)
+                                if (r->cgi.op.fcgi < FASTCGI_STDOUT)
                                     r->err = -RS502;
                                 else
                                     r->err = -1;
@@ -319,9 +362,7 @@ int EventHandlerClass::poll_worker()
                                 {
                                     print_err(r, "<%s:%d> Error: events=0x%x(0x%x)\n", 
                                             __func__, __LINE__, poll_fd[i].events, poll_fd[i].revents);
-                                    if (r->cgi.op.scgi == SCGI_CONNECT)
-                                        r->err = -RS404;
-                                    else if (r->cgi.op.scgi <= SCGI_READ_HTTP_HEADERS)
+                                    if (r->cgi.op.scgi <= SCGI_READ_HTTP_HEADERS)
                                         r->err = -RS502;
                                     else
                                         r->err = -1;
@@ -329,7 +370,7 @@ int EventHandlerClass::poll_worker()
                                 }
                                 break;
                             default:
-                                print_err(r, "<%s:%d> ??? Error: CGI_TYPE=%s\n", __func__, __LINE__, get_cgi_type(r->cgi_type));
+                                print_err(r, "<%s:%d> ??? Error: CGI_TYPE=%s\n", __func__, __LINE__, get_cgi_type(r->cgi.cgi_type));
                                 r->err = -1;
                                 del_from_list(r);
                                 break;
@@ -354,7 +395,6 @@ int EventHandlerClass::poll_worker()
                     del_from_list(r);
                 }
             }
-
             ++i;
         }
     }
@@ -379,37 +419,11 @@ int EventHandlerClass::wait_conn()
 //----------------------------------------------------------------------
 void EventHandlerClass::push_cgi(Connect *r)
 {
-    switch (r->cgi_type)
-    {
-        case CGI:
-        case PHPCGI:
-            r->cgi.to_script = -1;
-            r->cgi.from_script = -1;
-            r->cgi.op.cgi = CGI_CREATE_PROC;
-            break;
-        case PHPFPM:
-        case FASTCGI:
-            r->cgi.op.fcgi = FASTCGI_CONNECT;
-            break;
-        case SCGI:
-            r->cgi.op.scgi = SCGI_CONNECT;
-            break;
-        default:
-        {
-            print_err(r, "<%s:%d> operation=%s, cgi_type=%s\n", __func__, __LINE__, 
-                    get_str_operation(r->operation), get_cgi_type(r->cgi_type));
-            r->err = -1;
-            end_response(r);
-            return;
-        }
-    }
-
     r->operation = DYN_PAGE;
-    r->io_status = WORK;
+    r->io_status = WAIT;
     r->respStatus = RS200;
     r->sock_timer = 0;
     r->prev = NULL;
-    r->cgi.pid = -1;
 mtx_cgi.lock();
     r->next = cgi_wait_list_start;
     if (cgi_wait_list_start)
@@ -509,23 +523,23 @@ int EventHandlerClass::send_html(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::set_part(Connect *r)
 {
-    if ((r->mp.rg = r->rg.get()))
+    if ((r->multipart.rg = r->rg.get()))
     {
-        r->mp.status = SEND_HEADERS;
+        r->multipart.status = SEND_HEADERS;
         r->resp_headers.len = create_multipart_head(r);
-        r->resp_headers.p = r->mp.hdr.c_str();
+        r->resp_headers.p = r->multipart.hdr.c_str();
         
-        r->offset = r->mp.rg->start;
-        r->respContentLength = r->mp.rg->len;
+        r->offset = r->multipart.rg->start;
+        r->respContentLength = r->multipart.rg->len;
         lseek(r->fd, r->offset, SEEK_SET);
     }
     else
     {
-        r->mp.status = SEND_END;
-        r->mp.hdr = "";
-        r->mp.hdr << "\r\n--" << boundary << "--\r\n";
-        r->resp_headers.len = r->mp.hdr.size();
-        r->resp_headers.p = r->mp.hdr.c_str();
+        r->multipart.status = SEND_END;
+        r->multipart.hdr = "";
+        r->multipart.hdr << "\r\n--" << boundary << "--\r\n";
+        r->resp_headers.len = r->multipart.hdr.size();
+        r->resp_headers.p = r->multipart.hdr.c_str();
     }
 }
 //----------------------------------------------------------------------
@@ -551,7 +565,7 @@ int EventHandlerClass::send_headers(Connect *r)
         r->resp_headers.len -= wr;
         r->sock_timer = 0;
     }
-    
+
     return wr;
 }
 //----------------------------------------------------------------------
@@ -559,15 +573,15 @@ void EventHandlerClass::choose_worker(Connect *r)
 {
     if (r->operation == DYN_PAGE)
     {
-        if ((r->cgi_type == CGI) || (r->cgi_type == PHPCGI))
+        if ((r->cgi.cgi_type == CGI) || (r->cgi.cgi_type == PHPCGI))
         {
             cgi_worker(r);
         }
-        else if ((r->cgi_type == PHPFPM) || (r->cgi_type == FASTCGI))
+        else if ((r->cgi.cgi_type == PHPFPM) || (r->cgi.cgi_type == FASTCGI))
         {
             fcgi_worker(r);
         }
-        else if (r->cgi_type == SCGI)
+        else if (r->cgi.cgi_type == SCGI)
         {
             scgi_worker(r);
         }
@@ -609,21 +623,21 @@ void EventHandlerClass::worker(Connect *r)
         }
         else if (r->source_entity == MULTIPART_ENTITY)
         {
-            if (r->mp.status == SEND_HEADERS)
+            if (r->multipart.status == SEND_HEADERS)
             {
                 int wr = send_headers(r);
                 if (wr > 0)
                 {
                     r->send_bytes += wr;
                     if (r->resp_headers.len == 0)
-                        r->mp.status = SEND_PART;
+                        r->multipart.status = SEND_PART;
                 }
                 else if (wr == ERR_TRY_AGAIN)
                 {
                     r->io_status = WAIT;
                 }
             }
-            else if (r->mp.status == SEND_PART)
+            else if (r->multipart.status == SEND_PART)
             {
                 int wr = send_part_file(r);
                 if (wr < 0)
@@ -648,7 +662,7 @@ void EventHandlerClass::worker(Connect *r)
                 else
                     r->sock_timer = 0;
             }
-            else if (r->mp.status == SEND_END)
+            else if (r->multipart.status == SEND_END)
             {
                 int wr = send_headers(r);
                 if (wr > 0)
@@ -745,7 +759,7 @@ void EventHandlerClass::worker(Connect *r)
         else if (ret > 0)
         {
             num_request++;
-            r->operation = PREPARE_RESPONSE;
+            r->operation = RESPONSE_PREPARE;
             del_from_list(r);
         }
         else
@@ -825,59 +839,59 @@ void EventHandlerClass::worker(Connect *r)
     }
 }
 //----------------------------------------------------------------------
-int EventHandlerClass::set_pollfd_array(Connect *r, int i)
+int EventHandlerClass::set_pollfd_array(Connect *r, int *i)
 {
     if (r->io_direct == FROM_CLIENT)
     {
         if (r->operation != READ_REQUEST)
             r->timeout = conf->Timeout;
-        poll_fd[i].fd = r->clientSocket;
-        poll_fd[i].events = POLLIN;
+        poll_fd[*i].fd = r->clientSocket;
+        poll_fd[*i].events = POLLIN;
     }
     else if (r->io_direct == TO_CLIENT)
     {
         r->timeout = conf->Timeout;
-        poll_fd[i].fd = r->clientSocket;
-        poll_fd[i].events = POLLOUT;
+        poll_fd[*i].fd = r->clientSocket;
+        poll_fd[*i].events = POLLOUT;
     }
     else if (r->io_direct == FROM_CGI)
     {
-        switch (r->cgi_type)
+        switch (r->cgi.cgi_type)
         {
             case CGI:
             case PHPCGI:
-                poll_fd[i].fd = r->cgi.from_script;
+                poll_fd[*i].fd = r->cgi.from_script;
                 break;
             case PHPFPM:
             case FASTCGI:
             case SCGI:
-                poll_fd[i].fd = r->fcgi.fd;
+                poll_fd[*i].fd = r->cgi.fd;
                 break;
             case NO_CGI:
                 print_err(r, "<%s:%d> Error: NO_CGI ?\n", __func__, __LINE__);
                 return -1;
         }
-        poll_fd[i].events = POLLIN;
+        poll_fd[*i].events = POLLIN;
         r->timeout = conf->TimeoutCGI;
     }
     else if (r->io_direct == TO_CGI)
     {
-        switch (r->cgi_type)
+        switch (r->cgi.cgi_type)
         {
             case CGI:
             case PHPCGI:
-                poll_fd[i].fd = r->cgi.to_script;
+                poll_fd[*i].fd = r->cgi.to_script;
                 break;
             case PHPFPM:
             case FASTCGI:
             case SCGI:
-                poll_fd[i].fd = r->fcgi.fd;
+                poll_fd[*i].fd = r->cgi.fd;
                 break;
             case NO_CGI:
                 print_err(r, "<%s:%d> Error: NO_CGI ?\n", __func__, __LINE__);
                 return -1;
         }
-        poll_fd[i].events = POLLOUT;
+        poll_fd[*i].events = POLLOUT;
         r->timeout = conf->TimeoutCGI;
     }
     else
@@ -885,6 +899,8 @@ int EventHandlerClass::set_pollfd_array(Connect *r, int i)
         print_err(r, "<%s:%d> Error: io_direct=%d\n", __func__, __LINE__, r->io_direct);
         return -1;
     }
+
+    (*i)++;
 
     return 0;
 }
@@ -985,28 +1001,7 @@ int EventHandlerClass::send_part_file(Connect *req)
 void event_handler(int n_thr)
 {
     event_handler_cl[n_thr].init(n_thr);
-    event_handler_cl[n_thr].size_buf = conf->SndBufSize;
-    event_handler_cl[n_thr].snd_buf = NULL;
-printf("<%s:%d> +++++ worker thread %d run +++++\n", __func__, __LINE__, n_thr);
-#if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
-    if (conf->SendFile != 'y')
-#endif
-    {
-        event_handler_cl[n_thr].snd_buf = new (nothrow) char [event_handler_cl[n_thr].size_buf];
-        if (!event_handler_cl[n_thr].snd_buf)
-        {
-            print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
-            exit(1);
-        }
-    }
-
-    event_handler_cl[n_thr].poll_fd = new(nothrow) struct pollfd [conf->MaxConnectionPerThr];
-    if (!event_handler_cl[n_thr].poll_fd)
-    {
-        print_err("<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
-        exit(1);
-    }
-
+printf(" +++++ worker thread %d run +++++\n", n_thr);
     while (1)
     {
         if (event_handler_cl[n_thr].wait_conn())
@@ -1019,12 +1014,6 @@ printf("<%s:%d> +++++ worker thread %d run +++++\n", __func__, __LINE__, n_thr);
             break;
     }
 
-    delete [] event_handler_cl[n_thr].poll_fd;
-#if defined(SEND_FILE_) && (defined(LINUX_) || defined(FREEBSD_))
-    if (conf->SendFile != 'y')
-#endif
-        if (event_handler_cl[n_thr].snd_buf)
-            delete [] event_handler_cl[n_thr].snd_buf;
     print_err("<%s:%d> ***** exit thread %d *****\n", __func__, __LINE__, n_thr);
 }
 //======================================================================
@@ -1033,28 +1022,24 @@ void push_pollin_list(Connect *r)
     event_handler_cl[r->numThr].push_pollin_list(r);
 }
 //======================================================================
-int push_cgi(Connect *r)
+void push_cgi(Connect *r)
 {
     event_handler_cl[r->numThr].push_cgi(r);
-    return CONNECTION_OWNERSHIP_ENDED;
 }
 //======================================================================
-int push_send_file(Connect *r)
+void push_send_file(Connect *r)
 {
     event_handler_cl[r->numThr].push_send_file(r);
-    return CONNECTION_OWNERSHIP_ENDED;
 }
 //======================================================================
-int push_send_multipart(Connect *r)
+void push_send_multipart(Connect *r)
 {
     event_handler_cl[r->numThr].push_send_multipart(r);
-    return CONNECTION_OWNERSHIP_ENDED;
 }
 //======================================================================
-int push_send_html(Connect *r)
+void push_send_html(Connect *r)
 {
     event_handler_cl[r->numThr].push_send_html(r);
-    return CONNECTION_OWNERSHIP_ENDED;
 }
 //======================================================================
 void push_ssl_shutdown(Connect *r)

@@ -460,6 +460,8 @@ int read_conf_file(FILE *fconf)
                     return -1;
                 }
             }
+            else if (ss == "ServerSoftware")
+                c.ServerSoftware = "";
             else
             {
                 fprintf(stderr, "<%s:%d> Error read config file: [%s] line <%d>\n", __func__, __LINE__, ss.c_str(), line_);

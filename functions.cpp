@@ -183,8 +183,8 @@ const char *get_str_operation(OPERATION_TYPE n)
             return "SSL_ACCEPT";
         case READ_REQUEST:
             return "READ_REQUEST";
-        case PREPARE_RESPONSE:
-            return "PREPARE_RESPONSE";
+        case RESPONSE_PREPARE:
+            return "RESPONSE_PREPARE";
         case SEND_RESP_HEADERS:
             return "SEND_RESP_HEADERS";
         case SEND_ENTITY:
@@ -204,8 +204,6 @@ const char *get_cgi_operation(CGI_OPERATION n)
 {
     switch (n)
     {
-        case CGI_CREATE_PROC:
-            return "CGI_CREATE_PROC";
         case CGI_STDIN:
             return "CGI_STDIN";
         case CGI_READ_HTTP_HEADERS:
@@ -223,39 +221,14 @@ const char *get_fcgi_operation(FCGI_OPERATION n)
 {
     switch (n)
     {
-        case FASTCGI_CONNECT:
-            return "FASTCGI_CONNECT";
         case FASTCGI_BEGIN:
             return "FASTCGI_BEGIN";
         case FASTCGI_PARAMS:
             return "FASTCGI_PARAMS";
         case FASTCGI_STDIN:
             return "FASTCGI_STDIN";
-        case FASTCGI_READ_HTTP_HEADERS:
-            return "FASTCGI_READ_HTTP_HEADERS";
-        case FASTCGI_SEND_HTTP_HEADERS:
-            return "FASTCGI_SEND_HTTP_HEADERS";
-        case FASTCGI_SEND_ENTITY:
-            return "FASTCGI_SEND_ENTITY";
-        case FASTCGI_READ_ERROR:
-            return "FASTCGI_READ_ERROR";
-        case FASTCGI_CLOSE:
-            return "FASTCGI_CLOSE";
-    }
-
-    return "?";
-}
-//======================================================================
-const char *get_fcgi_status(FCGI_STATUS n)
-{
-    switch (n)
-    {
-        case FCGI_READ_DATA:
-            return "FCGI_READ_DATA";
-        case FCGI_READ_HEADER:
-            return "FCGI_READ_HEADER";
-        case FCGI_READ_PADDING:
-            return "FCGI_READ_PADDING";
+        case FASTCGI_STDOUT:
+            return "FASTCGI_STDOUT";
     }
 
     return "?";
@@ -265,8 +238,6 @@ const char *get_scgi_operation(SCGI_OPERATION n)
 {
     switch (n)
     {
-        case SCGI_CONNECT:
-            return "SCGI_CONNECT";
         case SCGI_PARAMS:
             return "SCGI_PARAMS";
         case SCGI_STDIN:
@@ -320,7 +291,7 @@ const char *get_cgi_dir(DIRECT n)
     return "?";
 }
 //======================================================================
-const char *istextfile_(FILE *f)
+const char *istextfile(FILE *f)
 {
     int cnt, i;
     int c;
@@ -333,12 +304,12 @@ const char *istextfile_(FILE *f)
 
     for (cnt = 0; ((c = fgetc(f)) >= 0) && (cnt < 128); cnt++)
     {
-        if ((c < ' ') && (c != '\t') && (c != '\r') && (c != '\n'))
-            return "";
+        if ((c == 0) && (c != '\t') && (c != '\r') && (c != '\n'))
+            return NULL;
     }
 
     if (cnt == 0)
-        return "";
+        return NULL;
 
     fseek(f, 0, SEEK_SET);
     fgets(s, sizeof(s), f);
@@ -348,13 +319,13 @@ const char *istextfile_(FILE *f)
     fseek(f, 0, SEEK_SET);
     for (cnt = 0; ((c = fgetc(f)) >= 0) && (cnt < 32); cnt++)
     {
-        if ((c < ' ') && (c != '\t') && (c != '\r') && (c != '\n'))
-            return "";
+        if ((c == 0) && (c != '\t') && (c != '\r') && (c != '\n'))
+            return NULL;
 
         if (c < 0x7f)
         {
             if (!strchr(chr_txt, c))
-                return "";
+                return NULL;
             continue;
         }
         else if ((c >= 0xc0) && (c <= 0xdf))
@@ -363,7 +334,7 @@ const char *istextfile_(FILE *f)
             {
                 c = fgetc(f);
                 if (!((c >= 0x80) && (c <= 0xbf)))
-                    return "";
+                    return NULL;
             }
             continue;
         }
@@ -373,7 +344,7 @@ const char *istextfile_(FILE *f)
             {
                 c = fgetc(f);
                 if (!((c >= 0x80) && (c <= 0xbf)))
-                    return "";
+                    return NULL;
             }
             continue;
         }
@@ -383,7 +354,7 @@ const char *istextfile_(FILE *f)
             {
                 c = fgetc(f);
                 if (!((c >= 0x80) && (c <= 0xbf)))
-                    return "";
+                    return NULL;
             }
             continue;
         }
@@ -393,7 +364,7 @@ const char *istextfile_(FILE *f)
             {
                 c = fgetc(f);
                 if (!((c >= 0x80) && (c <= 0xbf)))
-                    return "";
+                    return NULL;
             }
             continue;
         }
@@ -403,7 +374,7 @@ const char *istextfile_(FILE *f)
             {
                 c = fgetc(f);
                 if (!((c >= 0x80) && (c <= 0xbf)))
-                    return "";
+                    return NULL;
             }
             continue;
         }
@@ -412,31 +383,14 @@ const char *istextfile_(FILE *f)
     return "text/plain; charset=UTF-8";
 }
 //======================================================================
-const char *istextfile(const char *path)
-{
-    FILE *f;
-
-    f = fopen(path, "r");
-    if (f == NULL)
-    {
-        print_err("<%s:%d> Error fopen(%s): %s\n", __func__, __LINE__, path, strerror(errno));
-        return "";
-    }
-
-    const char *s = istextfile_(f);
-    fclose(f);
-
-    return s;
-}
-//======================================================================
-const char *ismediafile_(FILE *f)
+const char *isvideofile(FILE *f)
 {
     int size = 0;
     char s[64];
 
     size = fread(s, 1, 63, f);
     if (size <= 0)
-        return "";
+        return NULL;
 
     if (!memcmp(s, "\x30\x26\xB2\x75\x8E\x66\xCF\x11\xA6\xD9\x00\xAA\x00\x62\xCE\x6C", 16))
     {
@@ -456,10 +410,71 @@ const char *ismediafile_(FILE *f)
     {
         if (!memcmp(s + 8, "AVI LIST", 8))
             return "video/x-msvideo";
-        else if (!memcmp(s + 8, "WAVE", 4))
+        else
+            return NULL;
+    }
+
+    if (!memcmp(s, "FLV", 3))
+        return "video/x-flv";            // flv
+    if (!memcmp(s + 4, "ftyp3gp", 6))
+        return "video/3gpp"; // 3gp
+    if (!memcmp(s + 4, "ftypqt", 6))
+        return "video/quicktime"; // mov
+    if (!memcmp(s + 4, "ftyp", 4))
+        return "video/mp4";         // mp4
+    if (!memcmp(s, "\x1A\x45\xDF\xA3", 4))    // \x93\x42\x82\x88
+        return "video/x-matroska";                            // mkv
+    if (!memcmp(s, "OggS", 4))
+        return "video/ogg";
+    if (!memcmp(s + 4, "moov", 4))
+        return "video/quicktime";
+    if (!memcmp(s, "\x00\x00\x01\xBA", 4))
+        return "video/mpeg";
+    return NULL;
+}
+//======================================================================
+const char *ishtmlvideo(FILE *f)
+{
+    int size = 0;
+    char s[64];
+
+    size = fread(s, 1, 63, f);
+    if (size <= 0)
+        return NULL;
+    if (!memcmp(s + 4, "ftyp", 4))
+    {
+print_err("<%s:%d> -----\n", __func__, __LINE__);
+        return "video/mp4";
+    }
+    if (!memcmp(s, "OggS", 4))
+    {
+print_err("<%s:%d> -----\n", __func__, __LINE__);
+        return "video/ogg";
+    }
+    if (!memcmp(s, "\x1A\x45\xDF\xA3\x01\x00\x00\x00", 8))
+    {
+print_err("<%s:%d> -----\n", __func__, __LINE__);
+        return "video/webm";
+    }
+    
+    return NULL;
+}
+//======================================================================
+const char *isaudiofile(FILE *f)
+{
+    int size = 0;
+    char s[64];
+
+    size = fread(s, 1, 63, f);
+    if (size <= 0)
+        return NULL;
+    
+    if (!memcmp(s, "RIFF", 4))                              // avi, wav
+    {
+        if (!memcmp(s + 8, "WAVE", 4))
             return "audio/x-wav";
         else
-            return "";
+            return NULL;
     }
 
     if ((!memcmp(s, "\xff\xf1", 2)) || (!memcmp(s, "\xff\xf9", 2)))
@@ -488,40 +503,60 @@ const char *ismediafile_(FILE *f)
                 return "audio/mpeg";
         }
     }
-    //------------------------------------------------------------------
-    if (!memcmp(s, "FLV", 3))
-        return "video/x-flv";            // flv
-    if (!memcmp(s + 4, "ftyp3gp", 6))
-        return "video/3gpp"; // 3gp
-    if (!memcmp(s + 4, "ftypqt", 6))
-        return "video/quicktime"; // mov
-    if (!memcmp(s + 4, "ftyp", 4))
-        return "video/mp4";         // mp4
-    if (!memcmp(s, "\x1A\x45\xDF\xA3", 4))    // \x93\x42\x82\x88
-        return "video/x-matroska";                            // mkv
-    if (!memcmp(s, "OggS", 4))
-        return "video/ogg";
-    if (!memcmp(s + 4, "moov", 4))
-        return "video/quicktime";
-    if (!memcmp(s, "\x00\x00\x01\xBA", 4))
-        return "video/mpeg";
-    return "";
+
+    return NULL;
 }
 //======================================================================
-const char *ismediafile(const char *path)
+const char *isimagefile(FILE *f)
+{
+    int n = 0;
+    char s[64];
+
+    n = fread(s, 1, sizeof(s), f);
+    if (n <= 0)
+        return NULL;
+
+    if (!memcmp(s, "RIFF", 4))
+    {
+        if (!memcmp(s + 8, "WEBP", 4))
+            return "image/webp";
+        else
+            return NULL;
+    }
+
+    if (!memcmp(s, "\x89PNG\x0D\x0A\x1A\x0A", 8))
+        return "image/png";
+
+    if (!memcmp(s, "\xFF\xD8", 2))
+    {
+        if (!fseek(f, -2, SEEK_END))
+        {
+            char buf[8] = "";
+            n = fread(buf, 1, sizeof(buf), f);
+            if (n == 2)
+            {
+                if (!memcmp(buf, "\xFF\xD9", 2))
+                    return "image/jpeg";
+            }
+        }
+    }
+
+    return NULL;
+}
+//======================================================================
+const char *get_content_type(const char *(*func)(FILE *), const char *path)
 {
     FILE *f;
 
-    f = fopen(path, "r");
+    f = fopen(path, "rb");
     if (f == NULL)
     {
         print_err("<%s:%d> Error fopen(%s): %s\n", __func__, __LINE__, path, strerror(errno));
-        return "";
+        return NULL;
     }
 
-    const char *s = ismediafile_(f);
+    const char *s = func(f);
     fclose(f);
-
     return s;
 }
 //======================================================================
@@ -531,8 +566,7 @@ const char *content_type(const char *s)
 
     if (!p)
         goto end;
-
-    //       video
+    //------------- video -----------
     if (!strlcmp_case(p, ".ogv", 4))
         return "video/ogg";
     else if (!strlcmp_case(p, ".mp4", 4))
@@ -556,7 +590,7 @@ const char *content_type(const char *s)
     else if (!strlcmp_case(p, ".3gp", 4))
         return "video/video/3gpp";
 
-    //       sound
+    //-------------- audio --------------
     else if (!strlcmp_case(p, ".mp3", 4))
         return "audio/mpeg";
     else if (!strlcmp_case(p, ".wav", 4))
@@ -580,7 +614,7 @@ const char *content_type(const char *s)
     else if (!strlcmp_case(p, ".au", 3))
         return "audio/basic";
 
-    //       image
+    //-------------- image --------------
     else if (!strlcmp_case(p, ".gif", 4))
         return "image/gif";
     else if (!strlcmp_case(p, ".svg", 4) || !strlcmp_case(p, ".svgz", 5))
@@ -595,31 +629,37 @@ const char *content_type(const char *s)
         return "image/vnd.djvu";
     else if (!strlcmp_case(p, ".tiff", 5))
         return "image/tiff";
-    //       text
+    else if (!strlcmp_case(p, ".webp", 5))
+        return "image/webp";
+
+    //-------------- text ---------------
     else if (!strlcmp_case(p, ".txt", 4))
-        return istextfile(s);
+        return "text/plain";
     else if (!strlcmp_case(p, ".html", 5) || !strlcmp_case(p, ".htm", 4) || !strlcmp_case(p, ".shtml", 6))
         return "text/html";
     else if (!strlcmp_case(p, ".css", 4))
         return "text/css";
 
-    //       application
+    //---------- application -------------
     else if (!strlcmp_case(p, ".pdf", 4))
         return "application/pdf";
     else if (!strlcmp_case(p, ".gz", 3))
         return "application/gzip";
 end:
-    p = ismediafile(s);
-    if (p)
-        if (strlen(p))
-            return p;
+    p = NULL;
+    if ((p = get_content_type(isvideofile, s)))
+        return p;
 
-    p = istextfile(s);
-    if (p)
-        if (strlen(p))
-            return p;
+    if ((p = get_content_type(isaudiofile, s)))
+        return p;
 
-    return "";
+    if ((p = get_content_type(isimagefile, s)))
+        return p;
+
+    if ((p = get_content_type(istextfile, s)))
+        return p;
+
+    return "application/octet-stream";
 }
 //======================================================================
 int clean_path(char *path, int len)
@@ -672,6 +712,10 @@ int clean_path(char *path, int len)
                         j += 2;
                         continue;
                     }
+                    else if (ch == '.')
+                    {
+                        return -RS404;
+                    }
                     break;
                 case 3:
                     if (!memcmp(path + j, "../", 3))
@@ -701,10 +745,9 @@ int clean_path(char *path, int len)
                         j += 3;
                         continue;
                     }
-                    else if (!memcmp(path + j, "...", 3))
+                    else if (ch == '.')
                     {
                         return -RS404;
-                        continue;
                     }
                     break;
                 default:
@@ -722,6 +765,10 @@ int clean_path(char *path, int len)
                         {
                             return -RS400;
                         }
+                    }
+                    else if (!memcmp(path + j, "...", 3))
+                    {
+                        break;
                     }
                     else if (!memcmp(path + j, "./", 2))
                     {
@@ -749,9 +796,8 @@ int clean_path(char *path, int len)
             index_slash[level_dir] = i;
         }
     }
-    
-    *(path + i) = 0;
 
+    *(path + i) = 0;
     return i;
 }
 //======================================================================
@@ -804,8 +850,7 @@ int parse_startline_request(Connect *req, char *s)
     {
         if (*p == ' ')
         {
-            *p = 0;
-            p++;
+            *(p++) = 0;
             break;
         }
         p++;
@@ -828,7 +873,7 @@ int parse_startline_request(Connect *req, char *s)
 
     if (!(req->httpProt = get_int_http_prot(p_val)))
     {
-        print_err(req, "<%s:%d> Error version protocol\n", __func__, __LINE__);
+        print_err(req, "<%s:%d> Error version protocol: [%s]\n", __func__, __LINE__, req->uri);
         req->httpProt = HTTP11;
         return -RS400;
     }
@@ -897,6 +942,7 @@ int parse_headers(Connect *req)
         else if (!strcmp(pName, "content-type:"))
         {
             req->req_hd.iReqContentType = i;
+print_err("content-type: %s\n", pVal);
         }
         else if (!strcmp(pName, "host:"))
         {
@@ -1020,4 +1066,26 @@ int find_empty_line(Connect *req)
     }
 
     return 0;
+}
+//======================================================================
+void hex_dump_stderr(const void *p, int n)
+{
+    int count, addr = 0, col;
+    const unsigned char *buf = (unsigned char *)p;
+    char str[18];
+
+    for(count = 0; count < n;)
+    {
+        fprintf(stderr, "%08X  ", addr);
+        for(col = 0, addr = addr + 0x10; (count < n) && (col < 16); count++, col++)
+        {
+            if (col == 8) fprintf(stderr, " ");
+            fprintf(stderr, "%02X ", *(buf+count));
+            str[col] = (*(buf + count) >= 32 && *(buf + count) < 127) ? *(buf + count) : '.';
+        }
+        str[col] = 0;
+        if (col <= 8) fprintf(stderr, " ");
+        fprintf(stderr, "%*s  %s\n",(16 - (col)) * 3, "", str);
+    }
+    fprintf(stderr, "\n");
 }

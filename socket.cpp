@@ -112,7 +112,7 @@ int create_fcgi_socket(Connect *r, const char *host)
         if (sockfd == -1)
         {
             print_err(r, "<%s:%d> Error socket(): %s\n", __func__, __LINE__, strerror(errno));
-            return -1;
+            return -RS500;
         }
 
         const int sock_opt = 1;
@@ -120,7 +120,7 @@ int create_fcgi_socket(Connect *r, const char *host)
         {
             print_err(r, "<%s:%d> Error setsockopt(TCP_NODELAY): %s\n", __func__, __LINE__, strerror(errno));
             close(sockfd);
-            return -1;
+            return -RS500;
         }
 
         sock_addr.sin_port = htons(atoi(port));
@@ -130,17 +130,23 @@ int create_fcgi_socket(Connect *r, const char *host)
         {
             print_err(r, "<%s:%d> Error inet_pton(%s): %s\n", __func__, __LINE__, addr, strerror(errno));
             close(sockfd);
-            return -1;
+            return -RS500;
         }
 
         int flags = fcntl(sockfd, F_GETFL);
         if (flags == -1)
+        {
             print_err(r, "<%s:%d> Error fcntl(, F_GETFL, ): %s\n", __func__, __LINE__, strerror(errno));
+            return -RS500;
+        }
         else
         {
             flags |= O_NONBLOCK;
             if (fcntl(sockfd, F_SETFL, flags) == -1)
+            {
                 print_err(r, "<%s:%d> Error fcntl(, F_SETFL, ): %s\n", __func__, __LINE__, strerror(errno));
+                return -RS500;
+            }
         }
 
         if (connect(sockfd, (struct sockaddr *)(&sock_addr), sizeof(sock_addr)) != 0)
@@ -149,7 +155,7 @@ int create_fcgi_socket(Connect *r, const char *host)
             {
                 print_err(r, "<%s:%d> Error connect(%s): %s\n", __func__, __LINE__, host, strerror(errno));
                 close(sockfd);
-                return -1;
+                return -RS502;
             }
             else
                 r->io_status = WAIT;
@@ -164,20 +170,26 @@ int create_fcgi_socket(Connect *r, const char *host)
         if (sockfd == -1)
         {
             print_err(r, "<%s:%d> Error socket(): %s\n", __func__, __LINE__, strerror(errno));
-            return -1;
+            return -RS500;
         }
 
         sock_addr.sun_family = AF_UNIX;
-        strcpy (sock_addr.sun_path, host);
+        snprintf(sock_addr.sun_path, sizeof(sock_addr.sun_path), "%s", host);
 
         int flags = fcntl(sockfd, F_GETFL);
         if (flags == -1)
-        print_err(r, "<%s:%d> Error fcntl(, F_GETFL, ): %s\n", __func__, __LINE__, strerror(errno));
+        {
+            print_err(r, "<%s:%d> Error fcntl(, F_GETFL, ): %s\n", __func__, __LINE__, strerror(errno));
+            return -RS500;
+        }
         else
         {
             flags |= O_NONBLOCK;
             if (fcntl(sockfd, F_SETFL, flags) == -1)
+            {
                 print_err(r, "<%s:%d> Error fcntl(, F_SETFL, ): %s\n", __func__, __LINE__, strerror(errno));
+                return -RS500;
+            }
         }
 
         if (connect(sockfd, (struct sockaddr *) &sock_addr, SUN_LEN(&sock_addr)) == -1)
@@ -186,7 +198,7 @@ int create_fcgi_socket(Connect *r, const char *host)
             {
                 print_err(r, "<%s:%d> Error connect(%s): %s\n", __func__, __LINE__, host, strerror(errno));
                 close(sockfd);
-                return -1;
+                return -RS502;
             }
             else
                 r->io_status = WAIT;
@@ -200,7 +212,7 @@ int create_fcgi_socket(Connect *r, const char *host)
     {
         print_err("<%s:%d> Error fcntl(F_GETFD): %s\n", __func__, __LINE__, strerror(errno));
         close(sockfd);
-        return -1;
+        return -RS500;
     }
 
     flags |= FD_CLOEXEC;
@@ -208,51 +220,10 @@ int create_fcgi_socket(Connect *r, const char *host)
     {
         print_err("<%s:%d> Error fcntl(F_SETFD, FD_CLOEXEC): %s\n", __func__, __LINE__, strerror(errno));
         close(sockfd);
-        return -1;
+        return -RS500;
     }
 
     return sockfd;
-}
-//======================================================================
-int get_sock_fcgi(Connect *req, const char *script)
-{
-    int fcgi_sock = -1, len;
-    fcgi_list_addr *ps = conf->fcgi_list;
-
-    if (!script)
-    {
-        print_err(req, "<%s:%d> Not found\n", __func__, __LINE__);
-        return -RS404;
-    }
-
-    len = strlen(script);
-    if (len > 64)
-    {
-        print_err(req, "<%s:%d> Error len name script\n", __func__, __LINE__);
-        return -RS400;
-    }
-
-    for (; ps; ps = ps->next)
-    {
-        if (!strcmp(script, ps->script_name.c_str()))
-            break;
-    }
-
-    if (ps != NULL)
-    {
-        fcgi_sock = create_fcgi_socket(req, ps->addr.c_str());
-        if (fcgi_sock < 0)
-        {
-            fcgi_sock = -RS502;
-        }
-    }
-    else
-    {
-        print_err(req, "<%s:%d> Not found: %s\n", __func__, __LINE__, script);
-        fcgi_sock = -RS404;
-    }
-
-    return fcgi_sock;
 }
 //======================================================================
 int get_size_sock_buf(int domain, int optname, int type, int protocol)

@@ -473,9 +473,13 @@ public:
     //------------------------------------------------------------------
     void clear()
     {
-        buf_len = index_ = err = 0;
+        index_ = err = 0;
         if (buf)
-            buf[buf_len] = 0;
+        {
+            buf_len = buf_size = 0;
+            delete [] buf;
+            buf = NULL;
+        }
     }
     //------------------------------------------------------------------
     int error() const { return err; }

@@ -49,16 +49,16 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
     }
 
     String path;
-    switch (r->cgi_type)
+    switch (r->cgi.cgi_type)
     {
         case CGI:
-            path << conf->ScriptPath << get_script_name(r->scriptName.c_str());
+            path << conf->ScriptPath << get_script_name(r->cgi.scriptName.c_str());
             break;
         case PHPCGI:
-            path << conf->DocumentRoot << r->scriptName.c_str();
+            path << conf->DocumentRoot << r->cgi.scriptName.c_str();
             break;
         default:
-            print_err(r, "<%s:%d> ??? Error: CGI_TYPE=%s\n", __func__, __LINE__, get_cgi_type(r->cgi_type));
+            print_err(r, "<%s:%d> ??? Error: CGI_TYPE=%s\n", __func__, __LINE__, get_cgi_type(r->cgi.cgi_type));
             r->connKeepAlive = 0;
             return -RS500;
     }
@@ -106,7 +106,7 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
             close(cgi_serv[1]);
         }
 
-        if (r->cgi_type == PHPCGI)
+        if (r->cgi.cgi_type == PHPCGI)
             setenv("REDIRECT_STATUS", "true", 1);
         setenv("PATH", "/bin:/usr/bin:/usr/local/bin", 1);
         setenv("SERVER_SOFTWARE", conf->ServerSoftware.c_str(), 1);
@@ -124,7 +124,7 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
         if (r->req_hd.iUserAgent >= 0)
             setenv("HTTP_USER_AGENT", r->reqHdValue[r->req_hd.iUserAgent], 1);
 
-        setenv("SCRIPT_NAME", r->scriptName.c_str(), 1);
+        setenv("SCRIPT_NAME", r->cgi.scriptName.c_str(), 1);
         setenv("SCRIPT_FILENAME", path.c_str(), 1);
 
         if (r->reqMethod == M_POST)
@@ -137,11 +137,11 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
 
         setenv("QUERY_STRING", r->sReqParam ? r->sReqParam : "", 1);
 
-        if (r->cgi_type == CGI)
+        if (r->cgi.cgi_type == CGI)
         {
-            execl(path.c_str(), base_name(r->scriptName.c_str()), NULL);
+            execl(path.c_str(), base_name(r->cgi.scriptName.c_str()), NULL);
         }
-        else if (r->cgi_type == PHPCGI)
+        else if (r->cgi.cgi_type == PHPCGI)
         {
             if (conf->UsePHP == "php-cgi")
             {
@@ -236,7 +236,7 @@ int EventHandlerClass::cgi_create_proc(Connect *req)
         req->connKeepAlive = 0;
         return -RS500;
     }
-
+/*
     if (ioctl(cgi_serv[0], FIOCLEX) == -1)
     {
         print_err("<%s:%d> Error ioctl(FIOCLEX): %s\n", __func__, __LINE__, strerror(errno));
@@ -245,7 +245,7 @@ int EventHandlerClass::cgi_create_proc(Connect *req)
         close(cgi_serv[1]);
         return -RS500;
     }
-
+*/
     if (req->reqMethod == M_POST)
     {
         n = pipe(serv_cgi);
@@ -258,7 +258,7 @@ int EventHandlerClass::cgi_create_proc(Connect *req)
             return -RS500;
         }
 
-        if (ioctl(serv_cgi[1], FIOCLEX) == -1)
+        /*if (ioctl(serv_cgi[1], FIOCLEX) == -1)
         {
             print_err("<%s:%d> Error ioctl(FIOCLEX): %s\n", __func__, __LINE__, strerror(errno));
             req->connKeepAlive = 0;
@@ -268,7 +268,7 @@ int EventHandlerClass::cgi_create_proc(Connect *req)
             close(serv_cgi[0]);
             close(serv_cgi[1]);
             return -RS500;
-        }
+        }*/
     }
     else
     {
@@ -323,17 +323,18 @@ int EventHandlerClass::cgi_stdin(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0
         req->cgi.len_post -= req->cgi.len_buf;
         req->io_direct = TO_CGI;
         req->cgi.p = req->cgi.buf;
+        req->sock_timer = 0;
     }
     else if (req->io_direct == TO_CGI)
     {
         int fd;
-        if ((req->cgi_type == CGI) || (req->cgi_type == PHPCGI))
+        if ((req->cgi.cgi_type == CGI) || (req->cgi.cgi_type == PHPCGI))
             fd = req->cgi.to_script;
-        else if (req->cgi_type == SCGI)
-            fd = req->fcgi.fd;
+        else if (req->cgi.cgi_type == SCGI)
+            fd = req->cgi.fd;
         else
         {
-            print_err(req, "<%s:%d> ??? Error: CGI_TYPE=%s\n", __func__, __LINE__, get_cgi_type(req->cgi_type));
+            print_err(req, "<%s:%d> ??? Error: CGI_TYPE=%s\n", __func__, __LINE__, get_cgi_type(req->cgi.cgi_type));
             return -1;
         }
 
@@ -348,18 +349,19 @@ int EventHandlerClass::cgi_stdin(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0
 
         req->cgi.p += n;
         req->cgi.len_buf -= n;
+        req->sock_timer = 0;
 
         if (req->cgi.len_buf == 0)
         {
             if (req->cgi.len_post == 0)
             {
-                if ((req->cgi_type == CGI) || (req->cgi_type == PHPCGI))
+                if ((req->cgi.cgi_type == CGI) || (req->cgi.cgi_type == PHPCGI))
                 {
                     close(req->cgi.to_script);
                     req->cgi.to_script = -1;
                     cgi_set_status_readheaders(req);
                 }
-                else if (req->cgi_type == SCGI)
+                else if (req->cgi.cgi_type == SCGI)
                 {
                     req->cgi.op.scgi = SCGI_READ_HTTP_HEADERS;
                     req->io_direct = FROM_CGI;
@@ -370,7 +372,7 @@ int EventHandlerClass::cgi_stdin(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0
                 }
                 else
                 {
-                    print_err(req, "<%s:%d> ??? Error: CGI_TYPE=%s\n", __func__, __LINE__, get_cgi_type(req->cgi_type));
+                    print_err(req, "<%s:%d> ??? Error: CGI_TYPE=%s\n", __func__, __LINE__, get_cgi_type(req->cgi.cgi_type));
                     return -1;
                 }
             }
@@ -390,10 +392,10 @@ int EventHandlerClass::cgi_stdout(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 
     if (req->io_direct == FROM_CGI)
     {
         int fd;
-        if ((req->cgi_type == CGI) || (req->cgi_type == PHPCGI))
+        if ((req->cgi.cgi_type == CGI) || (req->cgi.cgi_type == PHPCGI))
             fd = req->cgi.from_script;
         else
-            fd = req->fcgi.fd;
+            fd = req->cgi.fd;
         req->cgi.len_buf = read(fd, req->cgi.buf + 8, req->cgi.size_buf);
         if (req->cgi.len_buf == -1)
         {
@@ -406,6 +408,7 @@ int EventHandlerClass::cgi_stdout(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 
         {
             if (req->mode_send == CHUNK)
             {
+                req->sock_timer = 0;
                 req->cgi.len_buf = 0;
                 req->cgi.p = req->cgi.buf + 8;
                 cgi_set_size_chunk(req);
@@ -416,6 +419,7 @@ int EventHandlerClass::cgi_stdout(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 
             return 0;
         }
 
+        req->sock_timer = 0;
         req->io_direct = TO_CLIENT;
         if (req->mode_send == CHUNK)
         {
@@ -437,6 +441,7 @@ int EventHandlerClass::cgi_stdout(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 
             return -1;
         }
 
+        req->sock_timer = 0;
         req->cgi.p += ret;
         req->cgi.len_buf -= ret;
         req->send_bytes += ret;
@@ -530,10 +535,10 @@ int EventHandlerClass::cgi_read_http_headers(Connect *req)
     if (num_read <= 0)
         return -RS502;
     int fd;
-    if ((req->cgi_type == CGI) || (req->cgi_type == PHPCGI))
+    if ((req->cgi.cgi_type == CGI) || (req->cgi.cgi_type == PHPCGI))
         fd = req->cgi.from_script;
     else
-        fd = req->fcgi.fd;
+        fd = req->cgi.fd;
 
     int n = read(fd, req->cgi.p, num_read);
     if (n == -1)
@@ -549,6 +554,7 @@ int EventHandlerClass::cgi_read_http_headers(Connect *req)
         return -1;
     }
 
+    req->sock_timer = 0;
     req->lenTail += n;
     req->cgi.len_buf += n;
     req->cgi.p += n;
@@ -590,17 +596,7 @@ int EventHandlerClass::cgi_set_size_chunk(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::cgi_worker(Connect* r)
 {
-    if (r->cgi.op.cgi == CGI_CREATE_PROC)
-    {
-        int ret = cgi_create_proc(r);
-        if (ret < 0)
-        {
-            print_err(r, "<%s:%d> Error cgi_create_proc()=%d\n", __func__, __LINE__, ret);
-            r->err = ret;
-            del_from_list(r);
-        }
-    }
-    else if (r->cgi.op.cgi == CGI_STDIN)
+    if (r->cgi.op.cgi == CGI_STDIN)
     {
         int ret = cgi_stdin(r);
         if (ret < 0)
@@ -613,6 +609,8 @@ void EventHandlerClass::cgi_worker(Connect* r)
                 del_from_list(r);
             }
         }
+        else
+            r->sock_timer = 0;
     }
     else if (r->cgi.op.cgi == CGI_READ_HTTP_HEADERS)
     {
@@ -668,6 +666,7 @@ void EventHandlerClass::cgi_worker(Connect* r)
             }
             else
             {
+                r->sock_timer = 0;
                 r->resp_headers.p += wr;
                 r->resp_headers.len -= wr;
                 if (r->resp_headers.len == 0)
@@ -744,6 +743,8 @@ void EventHandlerClass::cgi_worker(Connect* r)
         {
             del_from_list(r);
         }
+        else
+            r->sock_timer = 0;
     }
     else
     {
@@ -777,24 +778,83 @@ int EventHandlerClass::cgi_err(Connect *r)
 void EventHandlerClass::cgi_add_work_list()
 {
 mtx_cgi.lock();
-    int n_max = conf->MaxCgiProc - cgi_work;
-    Connect *r = cgi_wait_list_end;
-
-    for ( ; (n_max > 0) && r; r = cgi_wait_list_end, --n_max)
+    if ((cgi_work < conf->MaxCgiProc) && cgi_wait_list_end)
     {
-        cgi_wait_list_end = r->prev;
-        if (cgi_wait_list_end == NULL)
-            cgi_wait_list_start = NULL;
-        //--------------------------
-        if (work_list_end)
-            work_list_end->next = r;
-        else
-            work_list_start = r;
+        int n_max = conf->MaxCgiProc - cgi_work;
+        Connect *r = cgi_wait_list_end;
 
-        r->prev = work_list_end;
-        r->next = NULL;
-        work_list_end = r;
-        ++cgi_work;
+        for ( ; (n_max > 0) && r; r = cgi_wait_list_end, --n_max)
+        {
+            cgi_wait_list_end = r->prev;
+            if (cgi_wait_list_end == NULL)
+                cgi_wait_list_start = NULL;
+            //--------------------------
+            if ((r->cgi.cgi_type == CGI) || (r->cgi.cgi_type == PHPCGI))
+            {
+                r->cgi.to_script = -1;
+                r->cgi.from_script = -1;
+                
+                int ret = cgi_create_proc(r);
+                if (ret < 0)
+                {
+                    print_err(r, "<%s:%d> Error cgi_create_proc()=%d\n", __func__, __LINE__, ret);
+                    r->err = ret;
+
+                    if (r->cgi.from_script > 0)
+                    {
+                        close(r->cgi.from_script);
+                        r->cgi.from_script = -1;
+                    }
+
+                    if (r->cgi.to_script > 0)
+                    {
+                        close(r->cgi.to_script);
+                        r->cgi.to_script = -1;
+                    }
+            
+                    kill_chld(r);
+                    end_response(r);
+                    continue;
+                }
+            }
+            else if ((r->cgi.cgi_type == PHPFPM) || (r->cgi.cgi_type == FASTCGI))
+            {
+                int ret = fcgi_create_connect(r);
+                if (ret < 0)
+                {
+                    r->err = ret;
+                    end_response(r);
+                    continue;
+                }
+            }
+            else if (r->cgi.cgi_type == SCGI)
+            {
+                int ret = scgi_create_connect(r);
+                if (ret < 0)
+                {
+                    r->err = ret;
+                    end_response(r);
+                    continue;
+                }
+            }
+            else
+            {
+                print_err(r, "<%s:%d> operation=%d, cgi_type=%s\n", __func__, __LINE__, r->operation, get_cgi_type(r->cgi.cgi_type));
+                r->err = -1;
+                end_response(r);
+                continue;
+            }
+            //--------------------------
+            if (work_list_end)
+                work_list_end->next = r;
+            else
+                work_list_start = r;
+
+            r->prev = work_list_end;
+            r->next = NULL;
+            work_list_end = r;
+            ++cgi_work;
+        }
     }
 mtx_cgi.unlock();
 }

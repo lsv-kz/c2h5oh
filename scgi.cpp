@@ -2,8 +2,6 @@
 
 using namespace std;
 //======================================================================
-int get_sock_fcgi(Connect *req, const char *script);
-//======================================================================
 int EventHandlerClass::scgi_set_size_data(Connect* r)
 {
     int size = r->cgi.len_buf;
@@ -53,11 +51,11 @@ int EventHandlerClass::scgi_create_connect(Connect *r)
         }
     }
 
-    r->fcgi.fd = get_sock_fcgi(r, r->scriptName.c_str());
-    if (r->fcgi.fd < 0)
+    r->cgi.fd = create_fcgi_socket(r, r->cgi.script_path->c_str());
+    if (r->cgi.fd < 0)
     {
         print_err(r, "<%s:%d> Error connect to scgi\n", __func__, __LINE__);
-        return r->fcgi.fd;
+        return r->cgi.fd;
     }
 
     int ret = scgi_create_params(r);
@@ -79,7 +77,7 @@ int EventHandlerClass::scgi_create_params(Connect *r)
 {
     int i = 0;
     Param param;
-    r->fcgi.vPar.clear();
+    r->cgi.vPar.clear();
 
     if (r->reqMethod == M_POST)
     {
@@ -92,7 +90,7 @@ int EventHandlerClass::scgi_create_params(Connect *r)
         }
 
         param.name = "CONTENT_LENGTH";
-        r->fcgi.vPar.push_back(param);
+        r->cgi.vPar.push_back(param);
         ++i;
 
         if (r->req_hd.iReqContentType >=0)
@@ -104,82 +102,82 @@ int EventHandlerClass::scgi_create_params(Connect *r)
         }
 
         param.name = "CONTENT_TYPE";
-        r->fcgi.vPar.push_back(param);
+        r->cgi.vPar.push_back(param);
         ++i;
     }
     else
     {
         param.name = "CONTENT_LENGTH";
         param.val = "0";
-        r->fcgi.vPar.push_back(param);
+        r->cgi.vPar.push_back(param);
         ++i;
         
         param.name = "CONTENT_TYPE";
         param.val = "";
-        r->fcgi.vPar.push_back(param);
+        r->cgi.vPar.push_back(param);
         ++i;
     }
 
     param.name = "PATH";
     param.val = "/bin:/usr/bin:/usr/local/bin";
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "SERVER_SOFTWARE";
     param.val = conf->ServerSoftware;
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "SCGI";
     param.val = "1";
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "DOCUMENT_ROOT";
     param.val = conf->DocumentRoot;
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "REMOTE_ADDR";
     param.val = r->remoteAddr;
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "REMOTE_PORT";
     param.val = r->remotePort;
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "REQUEST_URI";
     param.val = r->uri;
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
     
     param.name = "DOCUMENT_URI";
     param.val = r->decodeUri;
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "REQUEST_METHOD";
     param.val = get_str_method(r->reqMethod);
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "SERVER_PROTOCOL";
     param.val = get_str_http_prot(r->httpProt);
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
     
     param.name = "SERVER_PORT";
     param.val = conf->ServerPort;
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     if (r->req_hd.iHost >= 0)
     {
         param.name = "HTTP_HOST";
         param.val = r->reqHdValue[r->req_hd.iHost];
-        r->fcgi.vPar.push_back(param);
+        r->cgi.vPar.push_back(param);
         ++i;
     }
 
@@ -187,7 +185,7 @@ int EventHandlerClass::scgi_create_params(Connect *r)
     {
         param.name = "HTTP_REFERER";
         param.val = r->reqHdValue[r->req_hd.iReferer];
-        r->fcgi.vPar.push_back(param);
+        r->cgi.vPar.push_back(param);
         ++i;
     }
 
@@ -195,7 +193,7 @@ int EventHandlerClass::scgi_create_params(Connect *r)
     {
         param.name = "HTTP_USER_AGENT";
         param.val = r->reqHdValue[r->req_hd.iUserAgent];
-        r->fcgi.vPar.push_back(param);
+        r->cgi.vPar.push_back(param);
         ++i;
     }
 
@@ -204,12 +202,12 @@ int EventHandlerClass::scgi_create_params(Connect *r)
         param.val = "keep-alive";
     else
         param.val = "close";
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "SCRIPT_NAME";
     param.val = r->decodeUri;
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
     param.name = "QUERY_STRING";
@@ -217,17 +215,17 @@ int EventHandlerClass::scgi_create_params(Connect *r)
         param.val = r->sReqParam;
     else
         param.val = "";
-    r->fcgi.vPar.push_back(param);
+    r->cgi.vPar.push_back(param);
     ++i;
 
-    if (i != (int)r->fcgi.vPar.size())
+    if (i != (int)r->cgi.vPar.size())
     {
         print_err(r, "<%s:%d> Error: create fcgi param list\n", __func__, __LINE__);
         return -1;
     }
 
-    r->fcgi.size_par = i;
-    r->fcgi.i_param = 0;
+    r->cgi.size_par = i;
+    r->cgi.i_param = 0;
 
     int ret = scgi_set_param(r);
     if (ret <= 0)
@@ -244,16 +242,16 @@ int EventHandlerClass::scgi_set_param(Connect *r)
     r->cgi.len_buf = 0;
     r->cgi.p = r->cgi.buf + 8;
 
-    for ( ; r->fcgi.i_param < r->fcgi.size_par; ++r->fcgi.i_param)
+    for ( ; r->cgi.i_param < r->cgi.size_par; ++r->cgi.i_param)
     {
-        int len_name = r->fcgi.vPar[r->fcgi.i_param].name.size();
+        int len_name = r->cgi.vPar[r->cgi.i_param].name.size();
         if (len_name == 0)
         {
             print_err(r, "<%s:%d> Error: len_name=0\n", __func__, __LINE__);
             return -RS502;
         }
 
-        int len_val = r->fcgi.vPar[r->fcgi.i_param].val.size();
+        int len_val = r->cgi.vPar[r->cgi.i_param].val.size();
         int len = len_name + len_val + 2;
 
         if (len > (r->cgi.size_buf - r->cgi.len_buf))
@@ -261,7 +259,7 @@ int EventHandlerClass::scgi_set_param(Connect *r)
             break;
         }
 
-        memcpy(r->cgi.p, r->fcgi.vPar[r->fcgi.i_param].name.c_str(), len_name);
+        memcpy(r->cgi.p, r->cgi.vPar[r->cgi.i_param].name.c_str(), len_name);
         r->cgi.p += len_name;
         
         memcpy(r->cgi.p, "\0", 1);
@@ -269,7 +267,7 @@ int EventHandlerClass::scgi_set_param(Connect *r)
 
         if (len_val > 0)
         {
-            memcpy(r->cgi.p, r->fcgi.vPar[r->fcgi.i_param].val.c_str(), len_val);
+            memcpy(r->cgi.p, r->cgi.vPar[r->cgi.i_param].val.c_str(), len_val);
             r->cgi.p += len_val;
         }
 
@@ -279,7 +277,7 @@ int EventHandlerClass::scgi_set_param(Connect *r)
         r->cgi.len_buf += len;
     }
     
-    if(r->fcgi.i_param < r->fcgi.size_par)
+    if(r->cgi.i_param < r->cgi.size_par)
     {
         print_err(r, "<%s:%d> Error: size of param > size of buf\n", __func__, __LINE__);
         return -RS502;
@@ -300,16 +298,7 @@ int EventHandlerClass::scgi_set_param(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::scgi_worker(Connect* r)
 {
-    if (r->cgi.op.scgi == SCGI_CONNECT)
-    {
-        int ret = scgi_create_connect(r);
-        if (ret < 0)
-        {
-            r->err = ret;
-            del_from_list(r);
-        }
-    }
-    else if (r->cgi.op.scgi == SCGI_PARAMS)
+    if (r->cgi.op.scgi == SCGI_PARAMS)
     {
         int ret = write_to_fcgi(r);
         if (ret < 0)

@@ -16,35 +16,48 @@ int create_response_headers(Connect *req)
     }
 
     req->resp_headers.s << get_str_http_prot(req->httpProt) << " " << status_resp(req->respStatus) << "\r\n"
-        << "Date: " << get_time(req->Time) << "\r\n"
-        << "Server: " << conf->ServerSoftware << "\r\n";
+        << "Date: " << get_time(req->Time) << "\r\n";
+
+    if (conf->ServerSoftware.size())
+        req->resp_headers.s << "Server: " << conf->ServerSoftware << "\r\n";
 
     if (req->reqMethod == M_OPTIONS)
         req->resp_headers.s << "Allow: OPTIONS, GET, HEAD, POST\r\n";
 
-    if (req->numPart == 1)
+    if (req->respStatus == RS204)
     {
-        if (req->respContentType)
-            req->resp_headers.s << "Content-Type: " << req->respContentType << "\r\n";
-        req->resp_headers.s << "Content-Length: " << req->respContentLength << "\r\n";
-
-        req->resp_headers.s << "Content-Range: bytes " << req->offset << "-"
-                                        << (req->offset + req->respContentLength - 1)
-                                        << "/" << req->fileSize << "\r\n";
+        req->resp_headers.s << "Content-Length: " << 0 << "\r\n";
     }
-    else if (req->numPart == 0)
+    else if (req->mode_send == CHUNK)
     {
-        if (req->respContentType)
-            req->resp_headers.s << "Content-Type: " << req->respContentType << "\r\n";
-        if (req->respContentLength >= 0)
+        req->resp_headers.s << "Transfer-Encoding: chunked\r\n";
+    }
+    else
+    {
+        if (req->numPart == 1)
         {
+            if (req->respContentType)
+                req->resp_headers.s << "Content-Type: " << req->respContentType << "\r\n";
             req->resp_headers.s << "Content-Length: " << req->respContentLength << "\r\n";
-            if (req->respStatus == RS200)
-                req->resp_headers.s << "Accept-Ranges: bytes\r\n";
+    
+            req->resp_headers.s << "Content-Range: bytes " << req->offset << "-"
+                                            << (req->offset + req->respContentLength - 1)
+                                            << "/" << req->fileSize << "\r\n";
         }
-
-        if (req->respStatus == RS416)
-            req->resp_headers.s << "Content-Range: bytes */" << req->fileSize << "\r\n";
+        else if (req->numPart == 0)
+        {
+            if (req->respContentType)
+                req->resp_headers.s << "Content-Type: " << req->respContentType << "\r\n";
+            if (req->respContentLength >= 0)
+            {
+                req->resp_headers.s << "Content-Length: " << req->respContentLength << "\r\n";
+                if (req->respStatus == RS200)
+                    req->resp_headers.s << "Accept-Ranges: bytes\r\n";
+            }
+    
+            if (req->respStatus == RS416)
+                req->resp_headers.s << "Content-Range: bytes */" << req->fileSize << "\r\n";
+        }
     }
 
     if (req->respStatus == RS101)
@@ -56,12 +69,9 @@ int create_response_headers(Connect *req)
     {
         if (conf->TimeoutKeepAlive == 0)
             req->resp_headers.s << "Connection: close\r\n";
-        else
+        else if (req->connKeepAlive != -1)
             req->resp_headers.s << "Connection: " << (req->connKeepAlive == 0 ? "close" : "keep-alive") << "\r\n";
     }
-
-    if (req->mode_send == CHUNK)
-        req->resp_headers.s << "Transfer-Encoding: chunked\r\n";
 
     if (req->hdrs.size())
     {
@@ -122,7 +132,8 @@ int send_message(Connect *r, const char *msg)
 
     r->resp_headers.p = r->resp_headers.s.c_str();
     r->resp_headers.len = r->resp_headers.s.size();
-    return push_send_html(r);
+    push_send_html(r);
+    return 1;
 }
 //======================================================================
 const char *status_resp(int st)
@@ -169,6 +180,8 @@ const char *status_resp(int st)
             return "414 Request-URI Too Large";
         case RS416:
             return "416 Range Not Satisfiable";
+        case RS429:
+            return "429 Too Many Requests";
         case RS500:
             return "500 Internal Server Error";
         case RS501:

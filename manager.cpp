@@ -87,9 +87,9 @@ void close_connect(Connect *req)
     {
         print_err(req, "<%s:%d> Error close(): %s\n", __func__, __LINE__, strerror(errno));
     }
+
     int n = req->numThr;
     delete req;
-
 mtx_conn.lock();
     conn_count[n]--;
     --num_conn;
@@ -105,7 +105,6 @@ void end_response(Connect *r)
         {
             r->respStatus = -r->err;
             r->err = 0;
-            r->hdrs = "";
             if (send_message(r, NULL) == 1)
                 return;
         }
@@ -285,6 +284,8 @@ void manager(int sockServer)
         if (ret_sel <= 0)
         {
             print_err("<%s:%d> Error select()=%d: %s\n", __func__, __LINE__, ret_sel, strerror(errno));
+            if (errno == EINTR)
+                continue;
             break;
         }
 
@@ -369,6 +370,11 @@ void manager(int sockServer)
         {
             print_err(req, "<%s:%d> Error getnameinfo()=%d: %s\n", __func__, __LINE__, err, gai_strerror(err));
             req->remoteAddr[0] = 0;
+            req->remotePort[0] = 0;
+            shutdown(clientSocket, SHUT_RDWR);
+            close(clientSocket);
+            delete req;
+            continue;
         }
 
         if (req->Protocol == HTTPS)

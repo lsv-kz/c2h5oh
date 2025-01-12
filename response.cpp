@@ -128,7 +128,7 @@ void threads_manager()
         t.detach();
         ++num_thr;
     }
-    printf("<%s:%d> ParseReqThreads=%d\n", __func__, __LINE__, num_thr);
+    printf(" ParseReqThreads=%d\n", num_thr);
     while (1)
     {
         if (is_maxthr())
@@ -213,16 +213,19 @@ void parse_request_thread()
             continue;
         }
 
-        if (clean_path(req->decodeUri, len) <= 0)
+        if ((len = clean_path(req->decodeUri, len)) <= 0)
         {
-            print_err(req, "<%s:%d> Error URI=%s\n", __func__, __LINE__, req->decodeUri);
-            req->lenDecodeUri = strlen(req->decodeUri);
-            req->err = -RS400;
+            req->lenDecodeUri = 0;
+            if (len == 0)
+                req->err = -RS400;
+            else
+                req->err = len;
             if (exit_thread(req))
                 return;
             continue;
         }
-        req->lenDecodeUri = strlen(req->decodeUri);
+        else
+            req->lenDecodeUri = len;
 
         if (strstr(req->uri, ".php") && (conf->UsePHP != "php-cgi") && (conf->UsePHP != "php-fpm"))
         {
@@ -254,7 +257,7 @@ void parse_request_thread()
         }
 
         int ret = prepare_response(req);
-        if (ret == CONNECTION_OWNERSHIP_ENDED)
+        if (ret == 1)
         {
             if (exit_thread(NULL))
                 return;
@@ -288,12 +291,12 @@ long long file_size(const char *s)
         return -1;
 }
 //======================================================================
-int fastcgi(Connect* req, const char* uri)
+int fastcgi(Connect* r, const char* uri)
 {
-    const char* p = strrchr(uri, '/');
+    const char *p = strrchr(uri, '/');
     if (!p)
         return -RS404;
-    fcgi_list_addr* i = conf->fcgi_list;
+    fcgi_list_addr *i = conf->fcgi_list;
     for (; i; i = i->next)
     {
         if (i->script_name[0] == '~')
@@ -311,14 +314,16 @@ int fastcgi(Connect* req, const char* uri)
     if (!i)
         return -RS404;
 
+    r->cgi.script_path = &i->addr;
     if (i->type == FASTCGI)
-        req->cgi_type = FASTCGI;
+        r->cgi.cgi_type = FASTCGI;
     else if (i->type == SCGI)
-        req->cgi_type = SCGI;
+        r->cgi.cgi_type = SCGI;
     else
         return -RS404;
-    req->scriptName = i->script_name.c_str();
-    return push_cgi(req);
+    r->cgi.scriptName = i->script_name;
+    push_cgi(r);
+    return 1;
 }
 //======================================================================
 int prepare_response(Connect *req)
@@ -327,12 +332,6 @@ int prepare_response(Connect *req)
     char *p = strstr(req->decodeUri, ".php");
     if (p && (*(p + 4) == 0))
     {
-        if ((conf->UsePHP != "php-cgi") && (conf->UsePHP != "php-fpm"))
-        {
-            print_err(req, "<%s:%d> Not found: %s\n", __func__, __LINE__, req->decodeUri);
-            return -RS404;
-        }
-
         struct stat st;
         if (stat(req->decodeUri + 1, &st) == -1)
         {
@@ -342,15 +341,18 @@ int prepare_response(Connect *req)
 
         if (conf->UsePHP == "php-fpm")
         {
-            req->scriptName = req->decodeUri;
-            req->cgi_type = PHPFPM;
-            return push_cgi(req);
+            req->cgi.scriptName = req->decodeUri;
+            req->cgi.script_path = &conf->PathPHP;
+            req->cgi.cgi_type = PHPFPM;
+            push_cgi(req);
+            return 1;
         }
         else if (conf->UsePHP == "php-cgi")
         {
-            req->scriptName = req->decodeUri;
-            req->cgi_type = PHPCGI;
-            return push_cgi(req);
+            req->cgi.scriptName = req->decodeUri;
+            req->cgi.cgi_type = PHPCGI;
+            push_cgi(req);
+            return 1;
         }
 
         return -1;
@@ -358,9 +360,10 @@ int prepare_response(Connect *req)
 
     if (!strncmp(req->decodeUri, "/cgi-bin/", 9) || !strncmp(req->decodeUri, "/cgi/", 5))
     {
-        req->cgi_type = CGI;
-        req->scriptName = req->decodeUri;
-        return push_cgi(req);
+        req->cgi.cgi_type = CGI;
+        req->cgi.scriptName = req->decodeUri;
+        push_cgi(req);
+        return 1;
     }
     //------------------------------------------------------------------
     string path;
@@ -402,23 +405,39 @@ int prepare_response(Connect *req)
 
         if (req->decodeUri[req->lenDecodeUri - 1] != '/')
         {
-            req->uri[req->uriLen] = '/';
-            req->uri[req->uriLen + 1] = '\0';
             req->respStatus = RS301;
 
-            req->hdrs.reserve(127);
-            req->hdrs << "Location: " << req->uri << "\r\n";
+            String location(req->lenDecodeUri * 3);
+            if (conf->Protocol == HTTPS)
+                location = "https://";
+            else
+                location = "http://";
+            location += req->reqHdValue[req->req_hd.iHost];
+
+            String s(req->lenDecodeUri * 3 + 64);
+            if (encode(req->decodeUri, s) == 0)
+            {
+                print_err(req, "<%s:%d> Error\n", __func__, __LINE__);
+                return -RS500;
+            }
+
+            location += s;
+            location += '/';
+
+            req->hdrs.reserve(req->lenDecodeUri * 3 + 16);
+            req->hdrs << "Location: " << location << "\r\n";
             if (req->hdrs.error())
             {
                 print_err(req, "<%s:%d> Error\n", __func__, __LINE__);
                 return -RS500;
             }
 
-            String s(256);
-            s << "The document has moved <a href=\"" << req->uri << "\">here</a>.";
+            s = "The document has moved <a href=\"";
+            s << location << "\">here</a>.";
             if (s.error())
             {
-                print_err(req, "<%s:%d> Error create_header()\n", __func__, __LINE__);
+                req->hdrs = "";
+                print_err(req, "<%s:%d> Error\n", __func__, __LINE__);
                 return -RS500;
             }
 
@@ -437,17 +456,19 @@ int prepare_response(Connect *req)
                 path += "/index.php";
                 if (!stat(path.c_str(), &st))
                 {
-                    req->scriptName = "";
-                    req->scriptName << req->decodeUri << "index.php";
+                    req->cgi.scriptName = "";
+                    req->cgi.scriptName << req->decodeUri << "index.php";
                     if (conf->UsePHP == "php-fpm")
                     {
-                        req->cgi_type = PHPFPM;
-                        return push_cgi(req);
+                        req->cgi.cgi_type = PHPFPM;
+                        push_cgi(req);
+                        return 1;
                     }
                     else if (conf->UsePHP == "php-cgi")
                     {
-                        req->cgi_type = PHPCGI;
-                        return push_cgi(req);
+                        req->cgi.cgi_type = PHPCGI;
+                        push_cgi(req);
+                        return 1;
                     }
 
                     return -1;
@@ -457,15 +478,17 @@ int prepare_response(Connect *req)
 
             if (conf->index_pl == 'y')
             {
-                req->cgi_type = CGI;
-                req->scriptName = "/cgi-bin/index.pl";
-                return push_cgi(req);
+                req->cgi.cgi_type = CGI;
+                req->cgi.scriptName = "/cgi-bin/index.pl";
+                push_cgi(req);
+                return 1;
             }
             else if (conf->index_fcgi == 'y')
             {
-                req->cgi_type = FASTCGI;
-                req->scriptName = "/index.fcgi";
-                return push_cgi(req);
+                req->cgi.cgi_type = FASTCGI;
+                req->cgi.scriptName = "/index.fcgi";
+                push_cgi(req);
+                return 1;
             }
 
             path.reserve(path.capacity() + 256);
@@ -493,7 +516,7 @@ int prepare_response(Connect *req)
         {
             print_err(req, "<%s:%d> Error open(%s): %s\n", __func__, __LINE__,
                                     path.c_str(), strerror(errno));
-            return -RS500;
+            return -RS404;
         }
     }
     path.reserve(0);
@@ -551,8 +574,8 @@ int send_file(Connect *req)
 
     if (create_response_headers(req))
         return -1;
-
-    return push_send_file(req);
+    push_send_file(req);
+    return 1;
 }
 //======================================================================
 int create_multipart_head(Connect *req);
@@ -562,9 +585,9 @@ int send_multypart(Connect *req)
     long long send_all_bytes = 0;
     char buf[1024];
 
-    for ( ; (req->mp.rg = req->rg.get()); )
+    for ( ; (req->multipart.rg = req->rg.get()); )
     {
-        send_all_bytes += (req->mp.rg->len);
+        send_all_bytes += (req->multipart.rg->len);
         send_all_bytes += create_multipart_head(req);
     }
     send_all_bytes += snprintf(buf, sizeof(buf), "\r\n--%s--\r\n", boundary);
@@ -584,23 +607,23 @@ int send_multypart(Connect *req)
 
     if (create_response_headers(req))
         return -1;
-
-    return push_send_multipart(req);
+    push_send_multipart(req);
+    return 1;
 }
 //======================================================================
 int create_multipart_head(Connect *req)
 {
-    req->mp.hdr = "";
-    req->mp.hdr << "\r\n--" << boundary << "\r\n";
+    req->multipart.hdr = "";
+    req->multipart.hdr << "\r\n--" << boundary << "\r\n";
 
     if (req->respContentType)
-        req->mp.hdr << "Content-Type: " << req->respContentType << "\r\n";
+        req->multipart.hdr << "Content-Type: " << req->respContentType << "\r\n";
     else
         return 0;
 
-    req->mp.hdr << "Content-Range: bytes " << req->mp.rg->start << "-" << req->mp.rg->end << "/" << req->fileSize << "\r\n\r\n";
+    req->multipart.hdr << "Content-Range: bytes " << req->multipart.rg->start << "-" << req->multipart.rg->end << "/" << req->fileSize << "\r\n\r\n";
 
-    return req->mp.hdr.size();
+    return req->multipart.hdr.size();
 }
 //======================================================================
 int options(Connect *r)
@@ -613,5 +636,6 @@ int options(Connect *r)
     r->resp_headers.p = r->resp_headers.s.c_str();
     r->resp_headers.len = r->resp_headers.s.size();
     r->html.len = 0;
-    return push_send_html(r);
+    push_send_html(r);
+    return 1;
 }

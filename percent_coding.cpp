@@ -86,6 +86,54 @@ int encode(const char *s_in, char *s_out, int len_out)
     return cnt_o;
 }
 //======================================================================
+int encode(const char *s_in, String& s_out)
+{
+    unsigned char c,d;
+    int cnt_o = 0;
+    char not_encode[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz" "0123456789" "/:-_.!~*'()";
+
+    if (!s_in) 
+        return 0;
+
+    while ((c = *s_in++))
+    {
+        if (c <= 0x7f)
+        {
+            if (!strchr(not_encode, c))
+            {
+                s_out += '%';
+                d = c >> 4;
+                s_out += (d < 10 ? d + '0' : d + '7');
+                d = c & 0x0f;
+                s_out += (d < 10 ? d + '0' : d + '7');
+                cnt_o += 3;
+            }
+            else if (c == ' ')
+            {
+                s_out += '+';
+                cnt_o++;
+            }
+            else
+            {
+                s_out += c;
+                cnt_o++;
+            }
+        }
+        else
+        {
+            s_out += '%';
+            d = c >> 4;
+            s_out += (d < 10 ? d + '0' : d + '7');
+            d = c & 0x0f;
+            s_out += (d < 10 ? d + '0' : d + '7');
+            cnt_o += 3;
+        }
+    }
+
+    return cnt_o;
+}
+//======================================================================
 int decode(const char *s_in, int len_in, char *s_out, int len)
 {
     if (!s_in || !s_out)
@@ -122,8 +170,8 @@ int decode(const char *s_in, int len_in, char *s_out, int len)
 
             *p = (char)i;
         }
-        else if (c == '+')
-            *p = ' ';
+        //else if (c == '+')
+        //    *p = ' ';
         else
             *p = c;
 

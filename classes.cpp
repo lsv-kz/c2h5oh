@@ -4,10 +4,11 @@ using namespace std;
 //======================================================================
 void Connect::init()
 {
-    sRange = NULL;;
+    sRange = NULL;
     sReqParam = NULL;
     //------------------------------------
-    decodeUri[0] = 0;
+    req.buf[0] = '\0';
+    decodeUri[0] = '\0';
     uri = NULL;
     p_newline = req.buf;
     tail = NULL;
@@ -25,7 +26,9 @@ void Connect::init()
     respStatus = 0;
     mode_send = NO_CHUNK;
 
-    hdrs = "";
+    cgi.script_path = NULL;
+
+    hdrs.clear();
     numPart = 0;
     respContentLength = -1LL;
     respContentType = NULL;

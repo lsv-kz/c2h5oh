@@ -55,11 +55,11 @@
 const int  MAX_PATH = 2048;
 const int  MAX_NAME = 256;
 const int  SIZE_BUF_REQUEST = 8192;
+const int  CGI_BUF_SIZE = 16384;
 const int  MAX_HEADERS = 25;
 const int  ERR_TRY_AGAIN = -1000;
 const int  LIMIT_WORK_THREADS = 16;
 const int  LIMIT_PARSE_REQ_THREADS = 128;
-const int  CONNECTION_OWNERSHIP_ENDED = 1;
 const char boundary[] = "---------a9b5r7a4c0a2d5a1b8r3a";
 
 enum {
@@ -67,7 +67,7 @@ enum {
     RS200 = 200,RS204 = 204,RS206 = 206,
     RS301 = 301, RS302,
     RS400 = 400,RS401,RS402,RS403,RS404,RS405,RS406,RS407,
-    RS408,RS411 = 411,RS413 = 413,RS414,RS415,RS416,RS417,RS418,
+    RS408,RS411 = 411,RS413 = 413,RS414,RS415,RS416,RS417,RS418,RS429 = 429,
     RS500 = 500,RS501,RS502,RS503,RS504,RS505
 };
 enum {
@@ -79,40 +79,17 @@ enum { HTTP09 = 1, HTTP10, HTTP11, HTTP2 };
 enum PROTOCOL {HTTP = 1, HTTPS};
 enum MODE_SEND { NO_CHUNK, CHUNK, CHUNK_END };
 enum SOURCE_ENTITY { NO_ENTITY, FROM_FILE, FROM_DATA_BUFFER, MULTIPART_ENTITY, };
-enum OPERATION_TYPE { SSL_ACCEPT = 1, READ_REQUEST, PREPARE_RESPONSE, SEND_RESP_HEADERS, SEND_ENTITY, DYN_PAGE, SSL_SHUTDOWN, CLOSE_CONNECT, };
+enum OPERATION_TYPE { SSL_ACCEPT = 1, READ_REQUEST, RESPONSE_PREPARE, SEND_RESP_HEADERS, SEND_ENTITY, DYN_PAGE, SSL_SHUTDOWN, CLOSE_CONNECT, };
 enum MULTIPART { SEND_HEADERS = 1, SEND_PART, SEND_END };
 enum IO_STATUS { WAIT = 1, WORK };
-
-enum CGI_TYPE { NO_CGI, CGI, PHPCGI, PHPFPM, FASTCGI, SCGI, };
 enum DIRECT { FROM_CGI = 1, TO_CGI, FROM_CLIENT, TO_CLIENT };
 
-enum FCGI_OPERATION { FASTCGI_CONNECT = 1, FASTCGI_BEGIN, FASTCGI_PARAMS, FASTCGI_STDIN, 
-                      FASTCGI_READ_HTTP_HEADERS, FASTCGI_SEND_HTTP_HEADERS, 
-                      FASTCGI_SEND_ENTITY, FASTCGI_READ_ERROR, FASTCGI_CLOSE };
-
-enum FCGI_STATUS {FCGI_READ_DATA = 1,  FCGI_READ_HEADER, FCGI_READ_PADDING }; 
-
-enum CGI_OPERATION { CGI_CREATE_PROC = 1, CGI_STDIN, CGI_READ_HTTP_HEADERS, CGI_SEND_HTTP_HEADERS, CGI_SEND_ENTITY };
-
-enum SCGI_OPERATION { SCGI_CONNECT = 1, SCGI_PARAMS, SCGI_STDIN, SCGI_READ_HTTP_HEADERS, SCGI_SEND_HTTP_HEADERS, SCGI_SEND_ENTITY };
-
+enum CGI_TYPE { NO_CGI, CGI, PHPCGI, PHPFPM, FASTCGI, SCGI, };
+enum FCGI_OPERATION { FASTCGI_BEGIN, FASTCGI_PARAMS, FASTCGI_STDIN, FASTCGI_STDOUT, };
+enum CGI_OPERATION { CGI_STDIN, CGI_READ_HTTP_HEADERS, CGI_SEND_HTTP_HEADERS, CGI_SEND_ENTITY };
+enum SCGI_OPERATION { SCGI_PARAMS, SCGI_STDIN, SCGI_READ_HTTP_HEADERS, SCGI_SEND_HTTP_HEADERS, SCGI_SEND_ENTITY };
 union OPERATION { CGI_OPERATION cgi; FCGI_OPERATION fcgi; SCGI_OPERATION scgi;};
 //----------------------------------------------------------------------
-const int CGI_BUF_SIZE = 16384;
-struct Cgi
-{
-    OPERATION op;
-    int  size_buf = CGI_BUF_SIZE;
-    char buf[CGI_BUF_SIZE + 16];
-    long len_buf;
-    long len_post;
-    char *p;
-
-    pid_t pid;
-    int  to_script;
-    int  from_script;
-};
-
 typedef struct fcgi_list_addr
 {
     std::string script_name;
@@ -238,65 +215,65 @@ public:
 
     int numThr;
     unsigned long numConn, numReq;
-    int       clientSocket;
-    int       err;
-    time_t    sock_timer;
-    int       timeout;
+    int    clientSocket;
+    int    err;
+    time_t sock_timer;
+    int    timeout;
 
     OPERATION_TYPE operation;
-    IO_STATUS    io_status;
+    IO_STATUS io_status;
     DIRECT io_direct;
 
     struct
     {
-        SSL  *ssl;
+        SSL *ssl;
         int err;
     } tls;
 
-    char      remoteAddr[NI_MAXHOST];
-    char      remotePort[NI_MAXSERV];
+    char remoteAddr[NI_MAXHOST];
+    char remotePort[NI_MAXSERV];
 
     struct
     {
-        char      buf[SIZE_BUF_REQUEST];
-        int       len;
+        char buf[SIZE_BUF_REQUEST];
+        int  len;
     } req;
 
-    char      *p_newline;
-    char      *tail;
-    int       lenTail;
+    char *p_newline;
+    char *tail;
+    int  lenTail;
 
-    char      decodeUri[SIZE_BUF_REQUEST];
+    char decodeUri[SIZE_BUF_REQUEST];
     unsigned int lenDecodeUri;
 
-    char      *uri;
+    char *uri;
     unsigned int uriLen;
     //------------------------------------------------------------------
     const char *sReqParam;
-    char      *sRange;
+    char *sRange;
 
-    int       reqMethod;
-    int       httpProt;
-    int       connKeepAlive;
+    int reqMethod;
+    int httpProt;
+    int connKeepAlive;
 
     struct
     {
-        int  iConnection;
-        int  iHost;
-        int  iUserAgent;
-        int  iReferer;
-        int  iUpgrade;
-        int  iReqContentType;
-        int  iReqContentLength;
-        int  iAcceptEncoding;
-        int  iRange;
-        int  iIfRange;
+        int iConnection;
+        int iHost;
+        int iUserAgent;
+        int iReferer;
+        int iUpgrade;
+        int iReqContentType;
+        int iReqContentLength;
+        int iAcceptEncoding;
+        int iRange;
+        int iIfRange;
         long long reqContentLength;
     } req_hd;
 
     int  countReqHeaders;
-    char  *reqHdName[MAX_HEADERS + 1];
-    const char  *reqHdValue[MAX_HEADERS + 1];
+    char *reqHdName[MAX_HEADERS + 1];
+    const char *reqHdValue[MAX_HEADERS + 1];
     //--------------------------------------
     struct
     {
@@ -314,15 +291,27 @@ public:
         int len;
     } html;
 
-    String scriptName;
-    CGI_TYPE cgi_type;
-    Cgi cgi;
-
     struct
     {
-        bool http_headers_received;
-        FCGI_STATUS status;
+        String scriptName;
+        CGI_TYPE cgi_type;
+        OPERATION op;
+        int  size_buf = CGI_BUF_SIZE;
+        char buf[CGI_BUF_SIZE + 16];
+        int len_buf;
+        int len_post;
+        char *p;
+
+        pid_t pid;
+        int to_script;
+        int from_script;
+        //-------------------------
+        const std::string *script_path;
         int fd;
+
+        bool http_hdrs_read;
+        bool http_hdrs_send;
+        bool entity_tail;
 
         int i_param;
         int size_par;
@@ -332,8 +321,8 @@ public:
         int dataLen;
         int paddingLen;
         char header[8];
-        int len_buf;
-    } fcgi;
+        int len_buf_hd;
+    } cgi;
 
     Ranges rg;
     struct
@@ -341,7 +330,7 @@ public:
         MULTIPART status;
         Range *rg;
         String hdr;
-    } mp;
+    } multipart;
 
     SOURCE_ENTITY source_entity;
     MODE_SEND mode_send;
@@ -370,6 +359,10 @@ class EventHandlerClass
     int close_thr;
     unsigned long num_request;
 
+    struct pollfd *poll_fd;
+    char *snd_buf;
+    int size_buf;
+
     Connect *work_list_start;
     Connect *work_list_end;
 
@@ -387,7 +380,7 @@ class EventHandlerClass
     void set_part(Connect *r);
     int send_headers(Connect *r);
     void choose_worker(Connect *r);
-    int set_pollfd_array(Connect *r, int i);
+    int set_pollfd_array(Connect *r, int *i);
 
     void kill_chld(Connect *r);
     int cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv);
@@ -401,7 +394,7 @@ class EventHandlerClass
     int cgi_find_empty_line(Connect *r);
     int cgi_read_http_headers(Connect *r);
 
-    void fcgi_set_header(Connect* r, int type);
+    void fcgi_set_header(Connect* r, unsigned char type);
     void get_info_from_header(Connect* r, const char* p);
     void fcgi_set_param(Connect *r);
     int fcgi_create_connect(Connect *r);
@@ -425,11 +418,8 @@ class EventHandlerClass
 
 public:
 
+    EventHandlerClass();
     ~EventHandlerClass();
-
-    struct pollfd *poll_fd;
-    char *snd_buf;
-    int size_buf;
 
     void init(int n);
     int wait_conn();
@@ -460,9 +450,9 @@ int create_fcgi_socket(Connect *r, const char *host);
 int read_from_client(Connect *r, char *buf, int len);
 int write_to_client(Connect *r, const char *buf, int len);
 int read_request_headers(Connect* r);
-int get_sock_fcgi(Connect *r, const char *script);
 //----------------------------------------------------------------------
 int encode(const char *s_in, char *s_out, int len_out);
+int encode(const char *s_in, String& s_out);
 int decode(const char *s_in, int len_in, char *s_out, int len);
 //----------------------------------------------------------------------
 int send_message(Connect *r, const char *msg);
@@ -485,7 +475,6 @@ const char *get_str_http_prot(int i);
 const char *get_str_operation(OPERATION_TYPE n);
 const char *get_cgi_operation(CGI_OPERATION n);
 const char *get_fcgi_operation(FCGI_OPERATION n);
-const char *get_fcgi_status(FCGI_STATUS n);
 const char *get_scgi_operation(SCGI_OPERATION n);
 const char *get_cgi_type(CGI_TYPE n);
 const char *get_cgi_dir(DIRECT n);
@@ -508,11 +497,11 @@ void push_resp_list(Connect *r);
 void end_response(Connect *r);
 void close_connect(Connect *r);
 //----------------------------------------------------------------------
-int push_cgi(Connect *r);
+void push_cgi(Connect *r);
 void push_pollin_list(Connect *r);
-int push_send_file(Connect *r);
-int push_send_multipart(Connect *r);
-int push_send_html(Connect *r);
+void push_send_file(Connect *r);
+void push_send_multipart(Connect *r);
+void push_send_html(Connect *r);
 void push_ssl_shutdown(Connect *r);
 void event_handler(int);
 void close_work_threads();

@@ -2,6 +2,11 @@
 
 using namespace std;
 //======================================================================
+const char *isaudiofile(FILE *f);
+const char *isimagefile(FILE *f);
+const char *ishtmlvideo(FILE *f);
+const char *get_content_type(const char *(*func)(FILE *), const char *path);
+//======================================================================
 int isimage(const char *name)
 {
     const char *p;
@@ -17,10 +22,17 @@ int isimage(const char *name)
         return 1;
     else if (!strlcmp_case(p, ".jpeg", 5) || !strlcmp_case(p, ".jpg", 4))
         return 1;
+    else if (!strlcmp_case(p, ".webp", 5))
+        return 1;
+    else
+    {
+        if (get_content_type(isimagefile, name))
+            return 1;
+    }
     return 0;
 }
 //======================================================================
-int isaudiofile(const char *name)
+int isaudio(const char *name)
 {
     const char *p;
 
@@ -33,6 +45,32 @@ int isaudiofile(const char *name)
         return 1;
     else if (!strlcmp_case(p, ".ogg", 4))
         return 1;
+    else
+    {
+        if (get_content_type(isaudiofile, name))
+            return 1;
+    }
+    return 0;
+}
+//======================================================================
+int isvideo(const char *name)
+{
+    const char *p;
+
+    if (!(p = strrchr(name, '.')))
+        return 0;
+    if (!strlcmp_case(p, ".mp4", 4))
+        return 1;
+    else if (!strlcmp_case(p, ".webm", 4))
+        return 1;
+    else if (!strlcmp_case(p, ".ogv", 4))
+        return 1;
+    else
+    {
+        if (get_content_type(ishtmlvideo, name))
+            return 1;
+    }
+
     return 0;
 }
 //======================================================================
@@ -74,7 +112,7 @@ void create_index_html(Connect *r, char **list, int numFiles, string& path)
             "<html>\r\n"
             " <head>\r\n"
             "  <meta charset=\"UTF-8\">\r\n"
-            "  <title>Index of " << r->decodeUri << " (ch)</title>\r\n"
+            "  <title>Index of " << r->decodeUri << "</title>\r\n"
             "  <style>\r\n"
             "    body {\r\n"
             "     margin-left:100px; margin-right:50px;\r\n"
@@ -116,9 +154,8 @@ void create_index_html(Connect *r, char **list, int numFiles, string& path)
     for (i = 0; i < numFiles; i++)
     {
         char buf[1024];
-        path += list[i];
-        n = lstat(path.c_str(), &st);
-        path.resize(len_path);
+        string file_path = path + list[i];
+        n = lstat(file_path.c_str(), &st);
         if ((n == -1) || !S_ISREG (st.st_mode))
             continue;
         else if (!strcmp(list[i], "favicon.ico"))
@@ -132,12 +169,17 @@ void create_index_html(Connect *r, char **list, int numFiles, string& path)
 
         size = (long long)st.st_size;
 
-        if (isimage(list[i]) && (conf->ShowMediaFiles == 'y'))
+        if (isimage(file_path.c_str()) && (conf->ShowMediaFiles == 'y'))
             r->html.s << "   <tr><td><a href=\"" << buf << "\"><img src=\"" << buf << "\" width=\"100\"></a>" << list[i] << "</td>"
                       << "<td align=\"right\">" << size << " bytes</td></tr>\r\n";
-        else if (isaudiofile(list[i]) && (conf->ShowMediaFiles == 'y'))
+        else if (isaudio(file_path.c_str()) && (conf->ShowMediaFiles == 'y'))
             r->html.s << "   <tr><td><audio preload=\"none\" controls src=\"" << buf << "\"></audio><a href=\""
                       << buf << "\">" << list[i] << "</a></td><td align=\"right\">" << size << " bytes</td></tr>\r\n";
+        else if (isvideo(file_path.c_str()) && (conf->ShowMediaFiles == 'y'))
+        {
+            r->html.s << "   <tr><td><video  width=\"320\" controls src=\"" << buf << "\"></video><a href=\""
+                      << buf << "\">" << list[i] << "</a></td><td align=\"right\">" << size << " bytes</td></tr>\r\n";
+        }
         else
             r->html.s << "   <tr><td><a href=\"" << buf << "\">" << list[i] << "</a></td><td align=\"right\">"
                       << size << " bytes</td></tr>\r\n";
@@ -171,8 +213,6 @@ int index_dir(Connect *r, string& path)
     const int maxNumFiles = 1024;
     int numFiles = 0;
     char *list[maxNumFiles];
-
-    path += '/';
 
     dir = opendir(path.c_str());
     if (dir == NULL)
@@ -226,5 +266,6 @@ int index_dir(Connect *r, string& path)
         r->resp_headers.len = r->resp_headers.s.size();
     }
 
-    return push_send_html(r);
+    push_send_html(r);
+    return 1;
 }
