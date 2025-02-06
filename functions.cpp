@@ -442,21 +442,11 @@ const char *ishtmlvideo(FILE *f)
     if (size <= 0)
         return NULL;
     if (!memcmp(s + 4, "ftyp", 4))
-    {
-print_err("<%s:%d> -----\n", __func__, __LINE__);
         return "video/mp4";
-    }
     if (!memcmp(s, "OggS", 4))
-    {
-print_err("<%s:%d> -----\n", __func__, __LINE__);
         return "video/ogg";
-    }
-    if (!memcmp(s, "\x1A\x45\xDF\xA3\x01\x00\x00\x00", 8))
-    {
-print_err("<%s:%d> -----\n", __func__, __LINE__);
+    if (!memcmp(s, "\x1A\x45\xDF\xA3\x01\x00\x00\x00", 8) && !memcmp(s + 31, "webm", 4))
         return "video/webm";
-    }
-    
     return NULL;
 }
 //======================================================================

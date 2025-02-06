@@ -7,9 +7,9 @@
 class String
 {
     char *buf;
-    unsigned int buf_size;
-    unsigned int buf_len;
-    unsigned int index_ = 0;
+    unsigned long buf_size;
+    unsigned long buf_len;
+    unsigned long index_ = 0;
     int err = 0;
     //------------------------------------------------------------------
     int is_space(char c)
@@ -26,31 +26,12 @@ class String
         return 0;
     }
     //------------------------------------------------------------------
-    int is_float(char c)
-    {
-        switch (c)
-        {
-            case '.':
-            case '0':
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7':
-            case '8':
-            case '9':
-                return 1;
-        }
-        return 0;
-    }
-    //------------------------------------------------------------------
     void append(const char ch)
     {
-        if (buf_size <= (buf_len + 1))
+        unsigned long n = buf_len + 1;
+        if (buf_size <= n)
         {
-            if (reserve(buf_len + 32))
+            if (reserve(n + n/2))
                 return;
         }
         
@@ -62,16 +43,27 @@ class String
     {
         if (!s)
             return;
-        append(s, strlen(s));
+        unsigned long len = strlen(s);
+        if (len == 0)
+        {
+            buf_len = index_ = 0;
+            if (buf)
+                *buf = '\0';
+        }
+        else
+            append(s, len);
     }
     //------------------------------------------------------------------
     void append(const char *s, unsigned int len)
     {
         if (!s)
             return;
-        if (buf_size <= (buf_len + len))
+        if (len == 0)
+            return;
+        unsigned long n = buf_len + len;
+        if (buf_size <= n)
         {
-            if (reserve(buf_len + len + 32))
+            if (reserve(n + n/2))
                 return;
         }
 
@@ -116,35 +108,6 @@ class String
         append(s + cnt, size_ - cnt - 1);
     }
     //------------------------------------------------------------------
-    int get_part_str(char *s, unsigned int max_len)
-    {
-        if (err)
-            return (err = 1);
-        for (; index_ < buf_len; ++index_)
-            if (!is_space(buf[index_]))
-                break;
-
-        unsigned int i = 0;
-        for ( ; (i < max_len) && (index_ < buf_len); index_++)
-        {
-            char c = buf[index_];
-            if (c == '\r')
-                continue;
-
-            if (is_space(c))
-            {
-                s[i] = 0;
-                return 0;
-            }
-
-            s[i++] = c;
-        }
-
-        s[i] = 0;
-
-        return 0;
-    }
-    //------------------------------------------------------------------
     void init()
     {
         buf = NULL;
@@ -155,6 +118,7 @@ public:
     String() { init(); }
     explicit String(unsigned int n) { init(); reserve(n); }
     String& operator >> (double&) = delete;
+    String & operator << (double f)=delete;
     String& operator >> (char*) = delete;
     String(const String&) = delete;
     String(const char *s) { init(); append(s); }
@@ -280,146 +244,104 @@ public:
     //------------------------------------------------------------------
     String& operator >> (String& s)
     {
-        s.clear();
-        unsigned int len = buf_size;
-        for (; index_ < len; ++index_)
+        for (; index_ < buf_size; ++index_)
             if (!is_space(buf[index_]))
                 break;
-
-        for (; index_ < len; index_++)
-        {
-            char c = buf[index_];
-            if (is_space(c))
+        unsigned long start = index_;
+        for (; index_ < buf_size; index_++)
+            if (is_space(buf[index_]))
                 break;
-            s += c;
-        }
+        s.append(buf + start, index_ - start);
         return *this;
     }
     //------------------------------------------------------------------
     String& operator >> (std::string& s)
     {
-        s.clear();
-        unsigned int len = buf_size;
-
-        for (; index_ < len; ++index_)
+        for (; index_ < buf_size; ++index_)
             if (!is_space(buf[index_]))
                 break;
-
-        for (; index_ < len; ++index_)
-        {
-            char c = buf[index_];
-            if (is_space(c))
+        unsigned long start = index_;
+        for (; index_ < buf_size; index_++)
+            if (is_space(buf[index_]))
                 break;
-            s += c;
-        }
+        s.append(buf + start, index_ - start);
         return *this;
     }
     //------------------------------------------------------------------
     String& operator >> (long long& ll)
     {
         ll = 0;
-        int max_len = 20;
-        char s[21];
-
         for (; (index_ < buf_len); ++index_)
             if (!is_space(buf[index_]))
                 break;
-        if (buf[index_] != '-')
-            max_len = 19;
-
-        if (get_part_str(s, max_len) == 0)
+        char *p;
+        ll = strtoll(buf + index_, &p, 10);
+        if (!p)
         {
-            char *p;
-            ll = strtoll(s, &p, 10);
-            if (!p)
-            {
-                err = 1;
-                ll = 0;
-            }
-            else
-                index_ -= strlen(p);
+            err = 1;
+            ll = 0;
         }
+        else
+            index_ += (p - (buf + index_));
         return *this;
     }
     //------------------------------------------------------------------
     String& operator >> (long& li)
     {
         li = 0;
-        int max_len = 11;
-        char s[12];
-
         for (; (index_ < buf_len); ++index_)
             if (!is_space(buf[index_]))
                 break;
-        if (buf[index_] != '-')
-            max_len = 10;
-
-        if (get_part_str(s, max_len) == 0)
+        char *p;
+        li = strtol(buf + index_, &p, 10);
+        if (!p)
         {
-            char *p;
-            li = strtol(s, &p, 10);
-            if (!p)
-            {
-                err = 1;
-                li = 0;
-            }
-            else
-                index_ -= strlen(p);
+            err = 1;
+            li = 0;
         }
+        else
+            index_ += (p - (buf + index_));
         return *this;
     }
     //------------------------------------------------------------------
     String& operator >> (int& li)
     {
         li = 0;
-        int max_len = 11;
-        char s[12];
-
         for (; (index_ < buf_len); ++index_)
             if (!is_space(buf[index_]))
                 break;
-        if (buf[index_] != '-')
-            max_len = 10;
-
-        if (get_part_str(s, max_len) == 0)
+        char *p;
+        li = strtol(buf + index_, &p, 10);
+        if (!p)
         {
-            char *p;
-            li = strtol(s, &p, 10);
-            if (!p)
-            {
-                err = 1;
-                li = 0;
-            }
-            else
-                index_ -= strlen(p);
+            err = 1;
+            li = 0;
         }
+        else
+            index_ += (p - (buf + index_));
         return *this;
     }
     //------------------------------------------------------------------
     String& operator >> (unsigned int& li)
     {
         li = 0;
-        int max_len = 11;
-        char s[12];
-
         for (; (index_ < buf_len); ++index_)
             if (!is_space(buf[index_]))
                 break;
-        if (buf[index_] != '-')
-            max_len = 10;
-
-        if (get_part_str(s, max_len) == 0)
+        if (buf[index_] == '-')
         {
-            char *p;
-            li = strtol(s, &p, 10);
-            if (!p)
-            {
-                err = 1;
-                li = 0;
-            }
-            else
-                index_ -= strlen(p);
+            fprintf(stderr, "<%s:%d> Error: integer is signed\n", __func__, __LINE__);
+            return *this;
         }
+        char *p;
+        li = strtol(buf + index_, &p, 10);
+        if (!p)
+        {
+            err = 1;
+            li = 0;
+        }
+        else
+            index_ += (p - (buf + index_));
         return *this;
     }
     //------------------------------------------------------------------
@@ -454,9 +376,8 @@ public:
         return 0;
     }
     //------------------------------------------------------------------
-    int size() const { return buf_len; }
-    
-    int capacity() const { return buf_size; }
+    unsigned long size() const { return buf_len; }
+    unsigned long capacity() const { return buf_size; }
     
     void reduce(unsigned int n)
     {
@@ -473,13 +394,9 @@ public:
     //------------------------------------------------------------------
     void clear()
     {
-        index_ = err = 0;
+        buf_len = index_ = err = 0;
         if (buf)
-        {
-            buf_len = buf_size = 0;
-            delete [] buf;
-            buf = NULL;
-        }
+            *buf = 0;
     }
     //------------------------------------------------------------------
     int error() const { return err; }
