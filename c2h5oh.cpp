@@ -378,11 +378,11 @@ int main(int argc, char *argv[])
         char *p, buf[512];
         if ((p = (char*)memccpy(buf, environ[i], '=', strlen(environ[i]))))
         {
-            /*if (strstr(environ[i], "DISPLAY") || strstr(environ[i], "XDG_RUNTIME_DIR"))
+            if (strstr(environ[i], "DISPLAY") || strstr(environ[i], "XDG_RUNTIME_DIR"))
             {
                 i++;
                 continue;
-            }*/
+            }
 
             *(p - 1) = 0;
             unsetenv(buf);

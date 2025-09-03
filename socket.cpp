@@ -38,7 +38,7 @@ int create_server_socket(const Config *conf)
         return -1;
     }
 
-    if (conf->TcpNoDelay == 'y')
+    if (conf->TcpNoDelay)
     {
         setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&sock_opt, sizeof(sock_opt)); // SOL_TCP
     }
@@ -74,7 +74,7 @@ int create_server_socket(const Config *conf)
     }
 
     struct linger l;
-    if (conf->LingerOn == 'y')
+    if (conf->LingerOn)
         l.l_onoff = 1;
     else
         l.l_onoff = 0;
@@ -94,15 +94,18 @@ int create_server_socket(const Config *conf)
     return sockfd;
 }
 //======================================================================
-int create_fcgi_socket(Connect *r, const char *host)
+int create_fcgi_socket(Connect *r, const std::string *host)
 {
     int sockfd, n;
     char addr[256];
     char port[16];
 
     if (!host)
+    {
+        print_err(r, "<%s:%d> Error host = NULL\n", __func__, __LINE__);
         return -1;
-    n = sscanf(host, "%[^:]:%s", addr, port);
+    }
+    n = sscanf(host->c_str(), "%[^:]:%s", addr, port);
     if (n == 2) //==== AF_INET ====
     {
         struct sockaddr_in sock_addr;
@@ -153,15 +156,11 @@ int create_fcgi_socket(Connect *r, const char *host)
         {
             if (errno != EINPROGRESS)
             {
-                print_err(r, "<%s:%d> Error connect(%s): %s\n", __func__, __LINE__, host, strerror(errno));
+                print_err(r, "<%s:%d> Error connect(%s): %s\n", __func__, __LINE__, host->c_str(), strerror(errno));
                 close(sockfd);
                 return -RS502;
             }
-            else
-                r->io_status = WAIT;
         }
-        else
-            r->io_status = WORK;
     }
     else //==== PF_UNIX ====
     {
@@ -174,7 +173,7 @@ int create_fcgi_socket(Connect *r, const char *host)
         }
 
         sock_addr.sun_family = AF_UNIX;
-        snprintf(sock_addr.sun_path, sizeof(sock_addr.sun_path), "%s", host);
+        snprintf(sock_addr.sun_path, sizeof(sock_addr.sun_path), "%s", host->c_str());
 
         int flags = fcntl(sockfd, F_GETFL);
         if (flags == -1)
@@ -196,15 +195,11 @@ int create_fcgi_socket(Connect *r, const char *host)
         {
             if (errno != EINPROGRESS)
             {
-                print_err(r, "<%s:%d> Error connect(%s): %s\n", __func__, __LINE__, host, strerror(errno));
+                print_err(r, "<%s:%d> Error connect(%s): %s\n", __func__, __LINE__, host->c_str(), strerror(errno));
                 close(sockfd);
                 return -RS502;
             }
-            else
-                r->io_status = WAIT;
         }
-        else
-            r->io_status = WORK;
     }
 
     int flags = fcntl(sockfd, F_GETFD);

@@ -116,8 +116,8 @@ void print_log(Connect *req)
     {
         ss  << req->numConn << "/" << req->numReq << " - " << req->remoteAddr << ":" << req->remotePort
             << " - [" << log_time(req->Time) << "] - \"" << get_str_method(req->reqMethod) << " "
-            //<< req->decodeUri << ((req->sReqParam) ? "?" : "") << ((req->sReqParam) ? req->sReqParam : "") << " "
-            << req->uri << " "
+            << req->decodeUri << ((req->sReqParam) ? "?" : "") << ((req->sReqParam) ? req->sReqParam : "") << " "
+            //<< req->uri << " "
             << get_str_http_prot(req->httpProt) << "\" "
             << req->respStatus << " " << req->send_bytes << " "
             << "\"" << ((req->req_hd.iReferer >= 0) ? req->reqHdValue[req->req_hd.iReferer] : "-") << "\" "

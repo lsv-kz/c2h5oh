@@ -168,7 +168,7 @@ void parse_request_thread()
             continue;
         }
     #ifdef TCP_CORK_
-        if (conf->TcpCork == 'y')
+        if (conf->TcpCork)
         {
         #if defined(LINUX_)
             int optval = 1;
@@ -370,7 +370,7 @@ int prepare_response(Connect *req)
 //  path.reserve(req->conf->DocumentRoot.size() + req->lenDecodeUri + 256);
 //  path = req->conf->DocumentRoot;
 
-    path.reserve(1 + req->lenDecodeUri + 16);
+    path.reserve(req->lenDecodeUri + 257);
     path += '.';
     path += req->decodeUri;
     int ret;
@@ -446,12 +446,12 @@ int prepare_response(Connect *req)
         //--------------------------------------------------------------
         int len = path.size();
         path += "/index.html";
-        if ((stat(path.c_str(), &st) != 0) || (conf->index_html != 'y'))
+        if ((stat(path.c_str(), &st) != 0) || (conf->index_html == false))
         {
             errno = 0;
             path.resize(len);
 
-            if ((conf->UsePHP != "n") && (conf->index_php == 'y'))
+            if ((conf->UsePHP != "off") && (conf->index_php))
             {
                 path += "/index.php";
                 if (!stat(path.c_str(), &st))
@@ -460,6 +460,7 @@ int prepare_response(Connect *req)
                     req->cgi.scriptName << req->decodeUri << "index.php";
                     if (conf->UsePHP == "php-fpm")
                     {
+                        req->cgi.script_path = &conf->PathPHP;
                         req->cgi.cgi_type = PHPFPM;
                         push_cgi(req);
                         return 1;
@@ -476,14 +477,14 @@ int prepare_response(Connect *req)
                 path.resize(len);
             }
 
-            if (conf->index_pl == 'y')
+            if (conf->index_pl)
             {
                 req->cgi.cgi_type = CGI;
                 req->cgi.scriptName = "/cgi-bin/index.pl";
                 push_cgi(req);
                 return 1;
             }
-            else if (conf->index_fcgi == 'y')
+            else if (conf->index_fcgi)
             {
                 req->cgi.cgi_type = FASTCGI;
                 req->cgi.scriptName = "/index.fcgi";
@@ -492,7 +493,7 @@ int prepare_response(Connect *req)
             }
 
             path.reserve(path.capacity() + 256);
-            if (conf->AutoIndex == 'y')
+            if (conf->AutoIndex)
             {
                 return index_dir(req, path);
             }
@@ -632,10 +633,7 @@ int options(Connect *r)
     r->respContentLength = 0;
     if (create_response_headers(r))
         return -1;
-
-    r->resp_headers.p = r->resp_headers.s.c_str();
-    r->resp_headers.len = r->resp_headers.s.size();
-    r->html.len = 0;
+    r->html.clear();
     push_send_html(r);
     return 1;
 }

@@ -128,10 +128,10 @@ int EventHandlerClass::fcgi_create_connect(Connect *r)
         return -RS500;
     }
 
-    r->cgi.fd = create_fcgi_socket(r, r->cgi.script_path->c_str());
+    r->cgi.fd = create_fcgi_socket(r, r->cgi.script_path);
     if (r->cgi.fd < 0)
     {
-        return r->cgi.fd;
+        return -RS502;
     }
 
     r->cgi.len_buf_hd = 0;
@@ -142,8 +142,7 @@ int EventHandlerClass::fcgi_create_connect(Connect *r)
     *(p++) = (unsigned char) (FCGI_RESPONDER        & 0xff);
     *(p++) = (unsigned char) 0;
     memset(p, 0, 5);
-    r->cgi.op.fcgi = FASTCGI_BEGIN;
-    r->io_status = WAIT;
+    r->cgi.op = FASTCGI_BEGIN;
     r->io_direct = TO_CGI;
 
     return 0;
@@ -369,7 +368,7 @@ int EventHandlerClass::fcgi_stdin(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0 
             {
                 if (r->cgi.dataLen == 0)
                 {
-                    r->cgi.op.fcgi = FASTCGI_STDOUT;
+                    r->cgi.op = CGI_STDOUT;
                     r->cgi.len_buf_hd = 0;
                     r->p_newline = r->cgi.p = r->cgi.buf + 8;
                     r->cgi.len_buf = 0;
@@ -394,7 +393,6 @@ int EventHandlerClass::fcgi_stdin(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0 
                 else
                 {
                     r->io_direct = FROM_CLIENT;
-                    r->io_status = WORK;
                 }
             }
         }
@@ -403,8 +401,10 @@ int EventHandlerClass::fcgi_stdin(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0 
     return 0;
 }
 //----------------------------------------------------------------------
-int EventHandlerClass::fcgi_stdout(Connect *r)// return [ ERR_TRY_AGAIN | -1 | 0 | 1 | 0< ]
+int EventHandlerClass::fcgi_stdout(Connect *r)
 {
+    // if ((r->cgi.fcgi_type == FCGI_END_REQUEST) && (r->mode_send == NO_CHUNK) && (r->io_direct == FROM_CGI))  return 0;
+    // if ((r->cgi.fcgi_type == FCGI_END_REQUEST) && (r->mode_send == CHUNK) && (r->io_direct == TO_CLIENT))  return 0;
     if (r->io_direct == FROM_CGI)
     {
         if (r->cgi.dataLen == 0)
@@ -590,19 +590,15 @@ int EventHandlerClass::fcgi_read_header(Connect* r)
 //----------------------------------------------------------------------
 void EventHandlerClass::fcgi_worker(Connect* r)
 {
-    if (r->cgi.op.fcgi == FASTCGI_BEGIN)
+    if (r->cgi.op == FASTCGI_BEGIN)
     {
         int ret = write_to_fcgi(r);
         if (ret < 0)
         {
-            if (ret == ERR_TRY_AGAIN)
-            {
-                r->io_status = WAIT;
-            }
-            else
+            if (ret != ERR_TRY_AGAIN)
             {
                 r->err = -RS502;
-                del_from_list(r);
+                end_resp(r);
             }
         }
         else if (ret > 0)
@@ -610,18 +606,18 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             r->sock_timer = 0;
             if (r->cgi.len_buf == 0)
             {
-                r->cgi.op.fcgi = FASTCGI_PARAMS;
+                r->cgi.op = FASTCGI_PARAMS;
                 r->io_direct = TO_CGI;
                 int ret = fcgi_create_params(r);
                 if (ret < 0)
                 {
                     r->err = ret;
-                    del_from_list(r);
+                    end_resp(r);
                 }
             }
         }
     }
-    else if (r->cgi.op.fcgi == FASTCGI_PARAMS)
+    else if (r->cgi.op == FASTCGI_PARAMS)
     {
         if (r->cgi.len_buf == 0)
         {
@@ -634,7 +630,7 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             r->sock_timer = 0;
             if ((r->cgi.len_buf == 0) && (r->cgi.dataLen == 0)) // end params
             {
-                r->cgi.op.fcgi = FASTCGI_STDIN;
+                r->cgi.op = CGI_STDIN;
                 if (r->req_hd.reqContentLength > 0)
                 {
                     r->cgi.len_post = r->req_hd.reqContentLength;
@@ -647,7 +643,6 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                     else
                     {
                         r->io_direct = FROM_CLIENT;
-                        r->io_status = WORK;
                     }
                 }
                 else
@@ -663,47 +658,41 @@ void EventHandlerClass::fcgi_worker(Connect* r)
         }
         else if (ret < 0)
         {
-            if (ret == ERR_TRY_AGAIN)
-                r->io_status = WAIT;
-            else
+            if (ret != ERR_TRY_AGAIN)
             {
                 r->err = -RS502;
-                del_from_list(r);
+                end_resp(r);
             }
         }
     }
-    else if (r->cgi.op.fcgi == FASTCGI_STDIN)
+    else if (r->cgi.op == CGI_STDIN)
     {
         int ret = fcgi_stdin(r);
         if (ret < 0)
         {
-            if (ret == ERR_TRY_AGAIN)
-                r->io_status = WAIT;
-            else
+            if (ret != ERR_TRY_AGAIN)
             {
                 r->err = -RS502;
-                del_from_list(r);
+                end_resp(r);
             }
         }
         else
             r->sock_timer = 0;
     }
-    else//====================== FCGI_STDOUT============================
+    else if (r->cgi.op == CGI_STDOUT)
     {
         if ((r->cgi.dataLen == 0) && (r->cgi.paddingLen == 0) && (r->cgi.len_buf == 0))
         {
             int ret = fcgi_read_header(r);
             if (ret < 0)
             {
-                if (ret == ERR_TRY_AGAIN)
-                    r->io_status = WAIT;
-                else
+                if (ret != ERR_TRY_AGAIN)
                 {
-                    if (r->cgi.op.fcgi < FASTCGI_STDOUT)
+                    if (r->cgi.op < CGI_STDOUT)
                         r->err = -RS502;
                     else
                         r->err = -1;
-                    del_from_list(r);
+                    end_resp(r);
                 }
             }
             else if (ret < 8)
@@ -723,7 +712,7 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                     default:
                         print_err(r, "<%s:%d> Error type=%d\n", __func__, __LINE__, r->cgi.fcgi_type);
                         r->err = -1;
-                        del_from_list(r);
+                        end_resp(r);
                 }
             }
         }
@@ -734,12 +723,10 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                 int ret = fcgi_read_http_headers(r);
                 if (ret < 0)
                 {
-                    if (ret == ERR_TRY_AGAIN)
-                        r->io_status = WAIT;
-                    else
+                    if (ret != ERR_TRY_AGAIN)
                     {
                         r->err = -RS502;
-                        del_from_list(r);
+                        end_resp(r);
                     }
                 }
                 else if (ret > 0)
@@ -748,14 +735,12 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                     {
                         print_err(r, "<%s:%d> Error create_response_headers()\n", __func__, __LINE__);
                         r->err = -1;
-                        del_from_list(r);
+                        end_resp(r);
                     }
                     else
                     {
                         r->cgi.http_hdrs_read = true;
                         r->cgi.entity_tail = true;
-                        r->resp_headers.p = r->resp_headers.s.c_str();
-                        r->resp_headers.len = r->resp_headers.s.size();
                         r->io_direct = TO_CLIENT;
                         r->sock_timer = 0;
                     }
@@ -763,34 +748,37 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             }
             else if (r->cgi.http_hdrs_send == false)
             {
-                if (r->resp_headers.len > 0)
+                if (r->headers.size_remain() > 0)
                 {
-                    int wr = write_to_client(r, r->resp_headers.p, r->resp_headers.len);
+                    int wr = write_to_client(r, r->headers.ptr_remain(), r->headers.size_remain());
                     if (wr < 0)
                     {
-                        if (wr == ERR_TRY_AGAIN)
-                            r->io_status = WAIT;
-                        else
+                        if (wr != ERR_TRY_AGAIN)
                         {
                             r->err = -1;
                             r->req_hd.iReferer = MAX_HEADERS - 1;
                             r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
-                            del_from_list(r);
+                            end_resp(r);
                         }
                     }
                     else
                     {
-                        r->resp_headers.p += wr;
-                        r->resp_headers.len -= wr;
                         r->sock_timer = 0;
-                        if (r->resp_headers.len == 0)
+                        r->headers.set_offset(wr);
+                        if (r->headers.size_remain() == 0)
                         {
                             if (r->reqMethod == M_HEAD)
                             {
-                                del_from_list(r);
+                                end_resp(r);
                             }
                             else
                             {
+                                if (r->respStatus == RS204)
+                                {
+                                    end_resp(r);
+                                    return;
+                                }
+
                                 r->cgi.http_hdrs_send = true;
                                 if (r->lenTail > 0)
                                 {
@@ -804,7 +792,7 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                                         if (cgi_set_size_chunk(r))
                                         {
                                             r->err = -1;
-                                            del_from_list(r);
+                                            end_resp(r);
                                         }
                                     }
                                 }
@@ -818,9 +806,9 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                 }
                 else
                 {
-                    fprintf(stderr, "? ? ?<%s:%d> -------\n", __func__, __LINE__);
+                    print_err(r, "? ? ?<%s:%d> -------\n", __func__, __LINE__);
                     r->err = -1;
-                    del_from_list(r);
+                    end_resp(r);
                 }
             }
             else if (r->cgi.entity_tail == true)
@@ -829,18 +817,16 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                 int ret = fcgi_stdout(r);
                 if (ret < 0)
                 {
-                    if (ret == ERR_TRY_AGAIN)
-                        r->io_status = WAIT;
-                    else
+                    if (ret != ERR_TRY_AGAIN)
                     {
                         r->err = -1;
-                        del_from_list(r);
+                        end_resp(r);
                     }
                 }
                 else if (ret == 0)
                 {
                     r->err = -1;
-                    del_from_list(r);
+                    end_resp(r);
                 }
                 else
                 {
@@ -854,18 +840,16 @@ void EventHandlerClass::fcgi_worker(Connect* r)
                 int ret = fcgi_stdout(r);
                 if (ret < 0)
                 {
-                    if (ret == ERR_TRY_AGAIN)
-                        r->io_status = WAIT;
-                    else
+                    if (ret != ERR_TRY_AGAIN)
                     {
                         r->err = -1;
-                        del_from_list(r);
+                        end_resp(r);
                     }
                 }
                 else if (ret == 0)
                 {
                     r->err = -1;
-                    del_from_list(r);
+                    end_resp(r);
                 }
                 else
                     r->sock_timer = 0;
@@ -876,17 +860,15 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             int ret = fcgi_stdout(r);
             if (ret < 0)
             {
-                if (ret == ERR_TRY_AGAIN)
-                    r->io_status = WAIT;
-                else
+                if (ret != ERR_TRY_AGAIN)
                 {
                     r->err = -1;
-                    del_from_list(r);
+                    end_resp(r);
                 }
             }
             else if (ret == 0)
             {
-                del_from_list(r);
+                end_resp(r);
             }
             else
                 r->sock_timer = 0;
@@ -896,29 +878,33 @@ void EventHandlerClass::fcgi_worker(Connect* r)
             int ret = read_padding(r);
             if (ret < 0)
             {
-                if (ret == ERR_TRY_AGAIN)
-                    r->io_status = WAIT;
-                else
+                if (ret != ERR_TRY_AGAIN)
                 {
                     r->err = -1;
-                    del_from_list(r);
+                    end_resp(r);
                 }
             }
         }
         else
         {
-            fprintf(stderr, "<%s:%d> ??? %d/%d %d\n", __func__, __LINE__, r->cgi.http_hdrs_read, r->cgi.http_hdrs_send, r->cgi.entity_tail);
+            print_err(r, "<%s:%d> ??? %d/%d %d\n", __func__, __LINE__, r->cgi.http_hdrs_read, r->cgi.http_hdrs_send, r->cgi.entity_tail);
             r->err = -1;
-            del_from_list(r);
+            end_resp(r);
         }
+    }
+    else
+    {
+        print_err(r, "<%s:%d> ??? cgi.op=%d\n", __func__, __LINE__, r->cgi.op);
+        r->err = -1;
+        end_resp(r);
     }
 }
 //----------------------------------------------------------------------
 int EventHandlerClass::fcgi_err(Connect *r)
 {
-    if (((r->cgi.op.fcgi == FASTCGI_BEGIN) || 
-         (r->cgi.op.fcgi == FASTCGI_PARAMS) || 
-         (r->cgi.op.fcgi == FASTCGI_STDIN)) && 
+    if (((r->cgi.op == FASTCGI_BEGIN) || 
+         (r->cgi.op == FASTCGI_PARAMS) || 
+         (r->cgi.op == CGI_STDIN)) && 
         (r->io_direct == TO_CGI))
     {
         return -RS504;

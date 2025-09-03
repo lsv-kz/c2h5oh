@@ -1,7 +1,6 @@
 #include "main.h"
 
 using namespace std;
-
 //======================================================================
 int encode(const char *s_in, char *s_out, int len_out)
 {
@@ -176,7 +175,7 @@ int decode(const char *s_in, int len_in, char *s_out, int len)
             *p = c;
 
         --len;
-         ++cnt;
+        ++cnt;
         if (len <= 0)
         {
             *p = 0;

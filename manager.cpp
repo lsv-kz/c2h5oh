@@ -12,7 +12,7 @@ int get_light_thread_number()
 {
     int n_thr = 0, n_conn;
 mtx_conn.lock();
-    if (conf->BalancedWorkThreads == 'y')
+    if (conf->BalancedWorkThreads)
     {
         n_conn = conn_count[0];
         for (int i = 1; i < conf->NumWorkThreads; ++i)
@@ -75,21 +75,21 @@ unique_lock<mutex> lk(mtx_conn);
     return close_server;
 }
 //======================================================================
-void close_connect(Connect *req)
+void close_connect(Connect *r)
 {
-    if ((req->Protocol == HTTPS) && (req->tls.ssl))
+    if ((r->Protocol == HTTPS) && (r->tls.ssl))
     {
-        SSL_free(req->tls.ssl);
+        SSL_free(r->tls.ssl);
     }
 
-    shutdown(req->clientSocket, SHUT_RDWR);
-    if (close(req->clientSocket))
+    shutdown(r->clientSocket, SHUT_RDWR);
+    if (close(r->clientSocket))
     {
-        print_err(req, "<%s:%d> Error close(): %s\n", __func__, __LINE__, strerror(errno));
+        print_err(r, "<%s:%d> Error close(): %s\n", __func__, __LINE__, strerror(errno));
     }
 
-    int n = req->numThr;
-    delete req;
+    int n = r->numThr;
+    delete r;
 mtx_conn.lock();
     conn_count[n]--;
     --num_conn;
@@ -118,7 +118,7 @@ void end_response(Connect *r)
         if ((r->Protocol == HTTPS) && (r->tls.ssl))
         {
     #ifdef TCP_CORK_
-            if (conf->TcpCork == 'y')
+            if (conf->TcpCork)
             {
             #if defined(LINUX_)
                 int optval = 0;
@@ -145,14 +145,12 @@ void end_response(Connect *r)
                     }
                     else if (r->tls.err == SSL_ERROR_WANT_READ)
                     {
-                        r->io_status = WAIT;
                         r->io_direct = FROM_CLIENT;
                         push_ssl_shutdown(r);
                         return;
                     }
                     else if (r->tls.err == SSL_ERROR_WANT_WRITE)
                     {
-                        r->io_status = WAIT;
                         r->io_direct = TO_CLIENT;
                         push_ssl_shutdown(r);
                         return;
@@ -160,7 +158,6 @@ void end_response(Connect *r)
                 }
                 else if (ret == 0)
                 {
-                    r->io_status = WORK;
                     push_ssl_shutdown(r);
                     return;
                 }
@@ -176,7 +173,7 @@ void end_response(Connect *r)
     else
     { // ----- KeepAlive -----
     #ifdef TCP_CORK_
-        if (conf->TcpCork == 'y')
+        if (conf->TcpCork)
         {
         #if defined(LINUX_)
             int optval = 0;

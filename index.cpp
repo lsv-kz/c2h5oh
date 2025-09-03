@@ -106,9 +106,9 @@ void create_index_html(Connect *r, char **list, int numFiles, string& path)
     long long size;
     struct stat st;
 
-    r->html.s = "";
+    r->html.clear();
     //------------------------------------------------------------------
-    r->html.s << "<!DOCTYPE HTML>\r\n"
+    r->html << "<!DOCTYPE HTML>\r\n"
             "<html>\r\n"
             " <head>\r\n"
             "  <meta charset=\"UTF-8\">\r\n"
@@ -126,9 +126,9 @@ void create_index_html(Connect *r, char **list, int numFiles, string& path)
             "   <tr><td><h3>Directories</h3></td></tr>\r\n";
     //------------------------------------------------------------------
     if (!strcmp(r->decodeUri, "/"))
-        r->html.s << "   <tr><td></td></tr>\r\n";
+        r->html << "   <tr><td></td></tr>\r\n";
     else
-        r->html.s << "   <tr><td><a href=\"../\">Parent Directory/</a></td></tr>\r\n";
+        r->html << "   <tr><td><a href=\"../\">Parent Directory/</a></td></tr>\r\n";
     //-------------------------- Directories ---------------------------
     for (i = 0; (i < numFiles); i++)
     {
@@ -145,10 +145,10 @@ void create_index_html(Connect *r, char **list, int numFiles, string& path)
             continue;
         }
 
-        r->html.s << "   <tr><td><a href=\"" << buf << "/\">" << list[i] << "/</a></td></tr>\r\n";
+        r->html << "   <tr><td><a href=\"" << buf << "/\">" << list[i] << "/</a></td></tr>\r\n";
     }
     //------------------------------------------------------------------
-    r->html.s << "  </table>\r\n   <hr>\r\n  <table border=\"0\" width=\"100\%\">\r\n"
+    r->html << "  </table>\r\n   <hr>\r\n  <table border=\"0\" width=\"100\%\">\r\n"
                 "   <tr><td><h3>Files</h3></td><td></td></tr>\r\n";
     //---------------------------- Files -------------------------------
     for (i = 0; i < numFiles; i++)
@@ -169,23 +169,23 @@ void create_index_html(Connect *r, char **list, int numFiles, string& path)
 
         size = (long long)st.st_size;
 
-        if (isimage(file_path.c_str()) && (conf->ShowMediaFiles == 'y'))
-            r->html.s << "   <tr><td><a href=\"" << buf << "\"><img src=\"" << buf << "\" width=\"100\"></a>" << list[i] << "</td>"
+        if (isimage(file_path.c_str()) && (conf->ShowMediaFiles))
+            r->html << "   <tr><td><a href=\"" << buf << "\"><img src=\"" << buf << "\" width=\"100\"></a>" << list[i] << "</td>"
                       << "<td align=\"right\">" << size << " bytes</td></tr>\r\n";
-        else if (isaudio(file_path.c_str()) && (conf->ShowMediaFiles == 'y'))
-            r->html.s << "   <tr><td><audio preload=\"none\" controls src=\"" << buf << "\"></audio><a href=\""
+        else if (isaudio(file_path.c_str()) && (conf->ShowMediaFiles))
+            r->html << "   <tr><td><audio preload=\"none\" controls src=\"" << buf << "\"></audio><a href=\""
                       << buf << "\">" << list[i] << "</a></td><td align=\"right\">" << size << " bytes</td></tr>\r\n";
-        else if (isvideo(file_path.c_str()) && (conf->ShowMediaFiles == 'y'))
+        else if (isvideo(file_path.c_str()) && (conf->ShowMediaFiles))
         {
-            r->html.s << "   <tr><td><video  width=\"320\" controls src=\"" << buf << "\"></video><a href=\""
+            r->html << "   <tr><td><video preload=\"none\" width=\"320\" controls src=\"" << buf << "\"></video><a href=\""
                       << buf << "\">" << list[i] << "</a></td><td align=\"right\">" << size << " bytes</td></tr>\r\n";
         }
         else
-            r->html.s << "   <tr><td><a href=\"" << buf << "\">" << list[i] << "</a></td><td align=\"right\">"
+            r->html << "   <tr><td><a href=\"" << buf << "\">" << list[i] << "</a></td><td align=\"right\">"
                       << size << " bytes</td></tr>\r\n";
     }
     //------------------------------------------------------------------
-    r->html.s << "  </table>\r\n"
+    r->html << "  </table>\r\n"
               "  <hr>\r\n"
               "  " << get_time() << "\r\n"
               "  <a href=\"#top\" style=\"display:block;\r\n"
@@ -202,8 +202,8 @@ void create_index_html(Connect *r, char **list, int numFiles, string& path)
               " </body>\r\n"
               "</html>";
     //------------------------------------------------------------------
-    r->respContentLength = r->html.s.size();
-    r->respContentType = "text/html";
+    r->respContentLength = r->html.size();
+    r->respContentType = "text/html;charset=UTF-8";
 }
 //======================================================================
 int index_dir(Connect *r, string& path)
@@ -244,9 +244,6 @@ int index_dir(Connect *r, string& path)
     create_index_html(r, list, numFiles, path);
     closedir(dir);
 
-    r->html.p = r->html.s.c_str();
-    r->html.len = r->html.s.size();
-
     r->respStatus = RS200;
     r->mode_send = NO_CHUNK;
     if (create_response_headers(r))
@@ -257,13 +254,7 @@ int index_dir(Connect *r, string& path)
 
     if (r->reqMethod == M_HEAD)
     {
-        r->resp_headers.p = "";
-        r->resp_headers.len = 0;
-    }
-    else
-    {
-        r->resp_headers.p = r->resp_headers.s.c_str();
-        r->resp_headers.len = r->resp_headers.s.size();
+        r->html.clear();
     }
 
     push_send_html(r);

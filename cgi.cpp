@@ -191,7 +191,7 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
         {
             r->sock_timer = 0;
             r->cgi.len_post = r->req_hd.reqContentLength - r->lenTail;
-            r->cgi.op.cgi = CGI_STDIN;
+            r->cgi.op = CGI_STDIN;
             if (r->lenTail > 0)
             {
                 r->io_direct = TO_CGI;
@@ -203,13 +203,11 @@ int EventHandlerClass::cgi_fork(Connect *r, int* serv_cgi, int* cgi_serv)
             else
             {
                 r->io_direct = FROM_CLIENT;
-                r->io_status = WORK;
             }
         }
         else
         {
             cgi_set_status_readheaders(r);
-            r->io_status = WAIT;
         }
 
         r->tail = NULL;
@@ -363,7 +361,7 @@ int EventHandlerClass::cgi_stdin(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0
                 }
                 else if (req->cgi.cgi_type == SCGI)
                 {
-                    req->cgi.op.scgi = SCGI_READ_HTTP_HEADERS;
+                    req->cgi.op = CGI_READ_HTTP_HEADERS;
                     req->io_direct = FROM_CGI;
                     req->tail = NULL;
                     req->lenTail = 0;
@@ -379,7 +377,6 @@ int EventHandlerClass::cgi_stdin(Connect *req)// return [ ERR_TRY_AGAIN | -1 | 0
             else
             {
                 req->io_direct = FROM_CLIENT;
-                req->io_status = WORK;
             }
         }
     }
@@ -596,33 +593,29 @@ int EventHandlerClass::cgi_set_size_chunk(Connect *r)
 //----------------------------------------------------------------------
 void EventHandlerClass::cgi_worker(Connect* r)
 {
-    if (r->cgi.op.cgi == CGI_STDIN)
+    if (r->cgi.op == CGI_STDIN)
     {
         int ret = cgi_stdin(r);
         if (ret < 0)
         {
-            if (ret == ERR_TRY_AGAIN)
-                r->io_status = WAIT;
-            else
+            if (ret != ERR_TRY_AGAIN)
             {
                 r->err = -RS502;
-                del_from_list(r);
+                end_resp(r);
             }
         }
         else
             r->sock_timer = 0;
     }
-    else if (r->cgi.op.cgi == CGI_READ_HTTP_HEADERS)
+    else if (r->cgi.op == CGI_READ_HTTP_HEADERS)
     {
         int ret = cgi_read_http_headers(r);
         if (ret < 0)
         {
-            if (ret == ERR_TRY_AGAIN)
-                r->io_status = WAIT;
-            else
+            if (ret != ERR_TRY_AGAIN)
             {
                 r->err = -RS502;
-                del_from_list(r);
+                end_resp(r);
             }
         }
         else if (ret > 0)
@@ -631,13 +624,11 @@ void EventHandlerClass::cgi_worker(Connect* r)
             {
                 print_err(r, "<%s:%d> Error create_response_headers()\n", __func__, __LINE__);
                 r->err = -1;
-                del_from_list(r);
+                end_resp(r);
             }
             else
             {
-                r->resp_headers.p = r->resp_headers.s.c_str();
-                r->resp_headers.len = r->resp_headers.s.size();
-                r->cgi.op.cgi = CGI_SEND_HTTP_HEADERS;
+                r->cgi.op = CGI_SEND_HTTP_HEADERS;
                 r->io_direct = TO_CLIENT;
                 r->sock_timer = 0;
             }
@@ -645,37 +636,34 @@ void EventHandlerClass::cgi_worker(Connect* r)
         else
             r->sock_timer = 0;
     }
-    else if (r->cgi.op.cgi == CGI_SEND_HTTP_HEADERS)
+    else if (r->cgi.op == CGI_SEND_HTTP_HEADERS)
     {
-        if (r->resp_headers.len > 0)
+        if (r->headers.size_remain() > 0)
         {
-            int wr = write_to_client(r, r->resp_headers.p, r->resp_headers.len);
+            int wr = write_to_client(r, r->headers.ptr_remain(), r->headers.size_remain());
             if (wr < 0)
             {
-                if (wr == ERR_TRY_AGAIN)
-                    r->io_status = WAIT;
-                else
+                if (wr != ERR_TRY_AGAIN)
                 {
                     r->err = -1;
                     r->req_hd.iReferer = MAX_HEADERS - 1;
                     r->reqHdValue[r->req_hd.iReferer] = "Connection reset by peer";
                     close(r->cgi.from_script);
                     r->cgi.from_script = -1;
-                    del_from_list(r);
+                    end_resp(r);
                 }
             }
             else
             {
                 r->sock_timer = 0;
-                r->resp_headers.p += wr;
-                r->resp_headers.len -= wr;
-                if (r->resp_headers.len == 0)
+                r->headers.set_offset(wr);
+                if (r->headers.size_remain() == 0)
                 {
                     if (r->reqMethod == M_HEAD)
                     {
                         close(r->cgi.from_script);
                         r->cgi.from_script = -1;
-                        del_from_list(r);
+                        end_resp(r);
                     }
                     else
                     {
@@ -683,11 +671,11 @@ void EventHandlerClass::cgi_worker(Connect* r)
                         {
                             close(r->cgi.from_script);
                             r->cgi.from_script = -1;
-                            del_from_list(r);
+                            end_resp(r);
                             return;
                         }
 
-                        r->cgi.op.cgi = CGI_SEND_ENTITY;
+                        r->cgi.op = CGI_STDOUT;
                         r->sock_timer = 0;
                         if (r->lenTail > 0)
                         {
@@ -701,7 +689,7 @@ void EventHandlerClass::cgi_worker(Connect* r)
                                 if (cgi_set_size_chunk(r))
                                 {
                                     r->err = -1;
-                                    del_from_list(r);
+                                    end_resp(r);
                                 }
                             }
                         }
@@ -719,44 +707,42 @@ void EventHandlerClass::cgi_worker(Connect* r)
         }
         else
         {
-            print_err(r, "<%s:%d> Error resp.len=%d\n", __func__, __LINE__, r->resp_headers.len);
+            print_err(r, "<%s:%d> Error headers.len=%d\n", __func__, __LINE__, r->headers.size_remain());
             r->err = -1;
             r->req_hd.iReferer = MAX_HEADERS - 1;
             r->reqHdValue[r->req_hd.iReferer] = "Error send response headers";
-            del_from_list(r);
+            end_resp(r);
         }
     }
-    else if (r->cgi.op.cgi == CGI_SEND_ENTITY)
+    else if (r->cgi.op == CGI_STDOUT)
     {
         int ret = cgi_stdout(r);
         if (ret < 0)
         {
-            if (ret == ERR_TRY_AGAIN)
-                r->io_status = WAIT;
-            else
+            if (ret != ERR_TRY_AGAIN)
             {
                 r->err = -1;
-                del_from_list(r);
+                end_resp(r);
             }
         }
         else if (ret == 0)
         {
-            del_from_list(r);
+            end_resp(r);
         }
         else
             r->sock_timer = 0;
     }
     else
     {
-        print_err(r, "<%s:%d> ??? Error: CGI_OPERATION=%s\n", __func__, __LINE__, get_cgi_operation(r->cgi.op.cgi));
+        print_err(r, "<%s:%d> ??? Error: CGI_OPERATION=%s\n", __func__, __LINE__, get_cgi_operation(r->cgi.op));
         r->err = -1;
-        del_from_list(r);
+        end_resp(r);
     }
 }
 //----------------------------------------------------------------------
 void EventHandlerClass::cgi_set_status_readheaders(Connect *r)
 {
-    r->cgi.op.cgi = CGI_READ_HTTP_HEADERS;
+    r->cgi.op = CGI_READ_HTTP_HEADERS;
     r->io_direct = FROM_CGI;
     r->tail = NULL;
     r->lenTail = 0;
@@ -767,9 +753,9 @@ void EventHandlerClass::cgi_set_status_readheaders(Connect *r)
 //----------------------------------------------------------------------
 int EventHandlerClass::cgi_err(Connect *r)
 {
-    if ((r->cgi.op.cgi == CGI_STDIN) && (r->io_direct == TO_CGI))
+    if ((r->cgi.op == CGI_STDIN) && (r->io_direct == TO_CGI))
         return -RS504;
-    else if (r->cgi.op.cgi == CGI_READ_HTTP_HEADERS)
+    else if (r->cgi.op == CGI_READ_HTTP_HEADERS)
         return -RS504;
     else
         return -1;
@@ -793,7 +779,7 @@ mtx_cgi.lock();
             {
                 r->cgi.to_script = -1;
                 r->cgi.from_script = -1;
-                
+
                 int ret = cgi_create_proc(r);
                 if (ret < 0)
                 {
@@ -811,7 +797,7 @@ mtx_cgi.lock();
                         close(r->cgi.to_script);
                         r->cgi.to_script = -1;
                     }
-            
+
                     kill_chld(r);
                     end_response(r);
                     continue;

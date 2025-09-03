@@ -52,6 +52,8 @@ void create_conf_file(const char *path)
     fprintf(f, "ServerAddr           0.0.0.0\n");
     fprintf(f, "ServerPort           8080\n\n");
 
+    fprintf(f, "Certificate          ?\n");
+    fprintf(f, "CertificateKey       ?\n");
     fprintf(f, "DocumentRoot         www/html\n");
     fprintf(f, "ScriptPath           www/cgi-bin\n");
     fprintf(f, "LogPath              www/logs\n");
@@ -205,9 +207,13 @@ int is_number(const char *s)
 //======================================================================
 int is_bool(const char *s)
 {
-    if (!s || (strlen(s) != 1))
+    if (!s)
         return 0;
-    return ((tolower(s[0]) == 'y') || (tolower(s[0]) == 'n'));
+    if (!strcmp_case(s, "on"))
+        return 1;
+    if (!strcmp_case(s, "off"))
+        return 1;
+    return 0;
 }
 //======================================================================
 int find_bracket(FILE *f, char c)
@@ -281,7 +287,7 @@ int read_conf_file(FILE *fconf)
 {
     String ss;
 
-    c.index_html = c.index_php = c.index_pl = c.index_fcgi = 'n';
+    c.index_html = c.index_php = c.index_pl = c.index_fcgi = false;
     c.fcgi_list = NULL;
 
     int n;
@@ -313,23 +319,47 @@ int read_conf_file(FILE *fconf)
                 }
             }
             else if ((s1 == "TcpCork") && is_bool(s2.c_str()))
-                c.TcpCork = (char)tolower(s2[0]);
+            {
+                if (strstr_case(s2.c_str(), "on"))
+                    c.TcpCork = true;
+                else if (strstr_case(s2.c_str(), "off"))
+                    c.TcpCork = false;
+            }
             else if ((s1 == "TcpNoDelay") && is_bool(s2.c_str()))
-                c.TcpNoDelay = (char)tolower(s2[0]);
+            {
+                if (strstr_case(s2.c_str(), "on"))
+                    c.TcpNoDelay = true;
+                else if (strstr_case(s2.c_str(), "off"))
+                    c.TcpNoDelay = false;
+            }
             else if ((s1 == "LingerOn") && is_bool(s2.c_str()))
-                c.LingerOn = (char)tolower(s2[0]);
+            {
+                if (strstr_case(s2.c_str(), "on"))
+                    c.LingerOn = true;
+                else if (strstr_case(s2.c_str(), "off"))
+                    c.LingerOn = false;
+            }
             else if ((s1 == "LingerTime") && is_number(s2.c_str()))
                 c.LingerTime = atoi(s2.c_str());
             else if ((s1 == "ListenBacklog") && is_number(s2.c_str()))
                 s2 >> c.ListenBacklog;
             else if ((s1 == "SendFile") && is_bool(s2.c_str()))
-                c.SendFile = (char)tolower(s2[0]);
+            {
+                if (strstr_case(s2.c_str(), "on"))
+                    c.SendFile = true;
+                else if (strstr_case(s2.c_str(), "off"))
+                    c.SendFile = false;
+            }
             else if ((s1 == "SndBufSize") && is_number(s2.c_str()))
                 s2 >> c.SndBufSize;
             else if ((s1 == "MaxConnectionPerThr") && is_number(s2.c_str()))
                 s2 >> c.MaxConnectionPerThr;
             else if ((s1 == "TimeoutPoll") && is_number(s2.c_str()))
                 s2 >> c.TimeoutPoll;
+            else if (s1 == "Certificate")
+                s2 >> c.Certificate;
+            else if (s1 == "CertificateKey")
+                s2 >> c.CertificateKey;
             else if (s1 == "DocumentRoot")
                 s2 >> c.DocumentRoot;
             else if (s1 == "ScriptPath")
@@ -339,7 +369,12 @@ int read_conf_file(FILE *fconf)
             else if (s1 == "PidFilePath")
                 s2 >> c.PidFilePath;
             else if ((s1 == "BalancedWorkThreads") && is_bool(s2.c_str()))
-                c.BalancedWorkThreads = (char)tolower(s2[0]);
+            {
+                if (strstr_case(s2.c_str(), "on"))
+                    c.BalancedWorkThreads = true;
+                else if (strstr_case(s2.c_str(), "off"))
+                    c.BalancedWorkThreads = false;
+            }
             else if ((s1 == "NumWorkThreads") && is_number(s2.c_str()))
                 s2 >> c.NumWorkThreads;
             else if ((s1 == "MaxParseReqThreads") && is_number(s2.c_str()))
@@ -359,11 +394,24 @@ int read_conf_file(FILE *fconf)
             else if ((s1 == "MaxRanges") && is_number(s2.c_str()))
                 s2 >> c.MaxRanges;
             else if (s1 == "UsePHP")
-                s2 >> c.UsePHP;
+            {
+                if ((s2 == "off") || (s2 == "php-fpm") || (s2 == "php-cgi"))
+                    s2 >> c.UsePHP;
+                else
+                {
+                    fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
+                    return -1;
+                }
+            }
             else if (s1 == "PathPHP")
                 s2 >> c.PathPHP;
             else if ((s1 == "ShowMediaFiles") && is_bool(s2.c_str()))
-                c.ShowMediaFiles = (char)tolower(s2[0]);
+            {
+                if (strstr_case(s2.c_str(), "on"))
+                    c.ShowMediaFiles = true;
+                else if (strstr_case(s2.c_str(), "off"))
+                    c.ShowMediaFiles = false;
+            }
             else if ((s1 == "ClientMaxBodySize") && is_number(s2.c_str()))
                 s2 >> c.ClientMaxBodySize;
             else if (s1 == "User")
@@ -371,7 +419,12 @@ int read_conf_file(FILE *fconf)
             else if (s1 == "Group")
                 s2 >> c.group;
             else if ((s1 == "AutoIndex") && is_bool(s2.c_str()))
-                c.AutoIndex = (char)tolower(s2[0]);
+            {
+                if (strstr_case(s2.c_str(), "on"))
+                    c.AutoIndex = true;
+                else if (strstr_case(s2.c_str(), "off"))
+                    c.AutoIndex = false;
+            }
             else
             {
                 fprintf(stderr, "<%s:%d> Error read config file: [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
@@ -394,13 +447,13 @@ int read_conf_file(FILE *fconf)
                         break;
 
                     if (ss == "index.html")
-                        c.index_html = 'y';
+                        c.index_html = true;
                     else if (ss == "index.php")
-                        c.index_php = 'y';
+                        c.index_php = true;
                     else if (ss == "index.pl")
-                        c.index_pl = 'y';
+                        c.index_pl = true;
                     else if (ss == "index.fcgi")
-                        c.index_fcgi = 'y';
+                        c.index_fcgi = true;
                     else
                     {
                         fprintf(stderr, "<%s:%d> Error read config file: \"index\" [%s], line <%d>\n", __func__, __LINE__, ss.c_str(), line_);
@@ -564,7 +617,7 @@ int read_conf_file(FILE *fconf)
             return -1;
         }
 
-        c.SendFile = 'n';
+        c.SendFile = false;
     }
     else
         c.ctx = NULL;

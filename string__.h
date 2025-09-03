@@ -7,9 +7,10 @@
 class String
 {
     char *buf;
-    unsigned long buf_size;
-    unsigned long buf_len;
-    unsigned long index_ = 0;
+    unsigned int buf_size;
+    unsigned int buf_len;
+    unsigned int index_ = 0;
+    unsigned int offset;
     int err = 0;
     //------------------------------------------------------------------
     int is_space(char c)
@@ -26,44 +27,60 @@ class String
         return 0;
     }
     //------------------------------------------------------------------
+    void append(const unsigned char ch)
+    {
+        if (err == 0)
+        {
+            unsigned int n = buf_len + 1;
+            if (buf_size <= n)
+            {
+                if (reserve(n + 16))
+                    return;
+            }
+
+            buf[buf_len++] = ch;
+            buf[buf_len] = 0;
+        }
+    }
+    //------------------------------------------------------------------
     void append(const char ch)
     {
-        unsigned long n = buf_len + 1;
-        if (buf_size <= n)
+        if (err == 0)
         {
-            if (reserve(n + n/2))
-                return;
+            unsigned int n = buf_len + 1;
+            if (buf_size <= n)
+            {
+                if (reserve(n + 16))
+                    return;
+            }
+
+            buf[buf_len++] = ch;
+            buf[buf_len] = 0;
         }
-        
-        buf[buf_len++] = ch;
-        buf[buf_len] = 0;
     }
     //------------------------------------------------------------------
     void append(const char *s)
     {
-        if (!s)
+        if ((s == NULL) || err)
             return;
-        unsigned long len = strlen(s);
-        if (len == 0)
-        {
-            buf_len = index_ = 0;
-            if (buf)
-                *buf = '\0';
-        }
-        else
-            append(s, len);
+        append(s, strlen(s));
+    }
+    //------------------------------------------------------------------
+    void append(char *s)
+    {
+        if ((s == NULL) || err)
+            return;
+        append(s, strlen(s));
     }
     //------------------------------------------------------------------
     void append(const char *s, unsigned int len)
     {
-        if (!s)
+        if ((s == NULL) || (len == 0) || err)
             return;
-        if (len == 0)
-            return;
-        unsigned long n = buf_len + len;
+        unsigned int n = buf_len + len;
         if (buf_size <= n)
         {
-            if (reserve(n + n/2))
+            if (reserve(n + 64))
                 return;
         }
 
@@ -85,56 +102,45 @@ class String
     template <typename T>
     void append(T t)
     {
-        const unsigned long size_ = 21;
+        const unsigned int size_ = 21;
         char s[size_];
-        unsigned int cnt, minus = (t < 0) ? 1 : 0;
-        const char *get_char = "9876543210123456789";
-
+        int cnt, minus = (t < 0) ? 1 : 0;
+        const char *get_char = "FEDCBA9876543210123456789ABCDEF";
         cnt = 20;
 
         s[cnt] = 0;
         while (cnt > 0)
         {
             --cnt;
-            s[cnt] = get_char[9 + (t % 10)];
+            s[cnt] = get_char[15 + (t % 10)];
             t /= 10;
-
             if (t == 0)
                 break;
         }
 
         if (minus)
             s[--cnt] = '-';
-        append(s + cnt, size_ - cnt - 1);
+        append(s + cnt);
+//fprintf(stdout, "<%s:%d> -------------\n", __func__, __LINE__);
     }
     //------------------------------------------------------------------
     void init()
     {
         buf = NULL;
-        buf_size = buf_len = err = 0; index_ = 0;
+        buf_size = buf_len = offset = index_ = 0;
+        err = 0;
     }
 
 public:
+
     String() { init(); }
     explicit String(unsigned int n) { init(); reserve(n); }
+    String(const char *s) { init(); append(s); }
+    //------------------------------------------------------------------
+    String(const String&) = delete;
     String& operator >> (double&) = delete;
     String & operator << (double f)=delete;
     String& operator >> (char*) = delete;
-    String(const String&) = delete;
-    String(const char *s) { init(); append(s); }
-    //------------------------------------------------------------------
-    /*String(const String& s)
-    {
-        init();
-        if (s.buf)
-        {
-            int n = s.buf_len + 1 + 32;
-            if (reserve(n))
-                return;
-            append(s.buf, s.buf_len);
-            buf_size = n;
-        }
-    }*/
     //------------------------------------------------------------------
     ~String()
     {
@@ -166,7 +172,9 @@ public:
     //------------------------------------------------------------------
     friend bool operator == (const String& s1, const char *s2)
     {
-        if (!strcmp(s1.buf,s2))
+        if ((s1.buf == NULL) || (s2 == NULL))
+            return false;
+        if (!strcmp(s1.buf, s2))
             return true;
         else
             return false;
@@ -192,6 +200,12 @@ public:
         return *this;
     }
     //------------------------------------------------------------------
+    String & operator += (char *s)
+    {
+        append(s);
+        return *this;
+    }
+    //------------------------------------------------------------------
     String & operator += (const String& s)
     {
         append(s);
@@ -200,7 +214,7 @@ public:
     //------------------------------------------------------------------
     const char operator[] (unsigned int n) const
     {
-        if (n >= (unsigned int)buf_size)
+        if (n >= buf_size)
             return '\0';
         return buf[n];
     }
@@ -219,7 +233,7 @@ public:
     //------------------------------------------------------------------
     String& operator << (char* s)
     {
-        append((const char*)s);
+        append(s);
         return *this;
     }
     //------------------------------------------------------------------
@@ -234,9 +248,9 @@ public:
         append(s);
         return *this;
     }
-
+    //------------------------------------------------------------------
     template <typename T>
-    String& operator << (const T t)
+    String& operator << (T t)
     {
         append(t);
         return *this;
@@ -247,7 +261,7 @@ public:
         for (; index_ < buf_size; ++index_)
             if (!is_space(buf[index_]))
                 break;
-        unsigned long start = index_;
+        unsigned int start = index_;
         for (; index_ < buf_size; index_++)
             if (is_space(buf[index_]))
                 break;
@@ -260,7 +274,7 @@ public:
         for (; index_ < buf_size; ++index_)
             if (!is_space(buf[index_]))
                 break;
-        unsigned long start = index_;
+        unsigned int start = index_;
         for (; index_ < buf_size; index_++)
             if (is_space(buf[index_]))
                 break;
@@ -357,12 +371,18 @@ public:
     {
         if (buf_size >= n)
             return 0;
+        if (n > 65536)
+        {
+            fprintf(stderr, "<%s:%d> Error limit: length=%u\n", __func__, __LINE__, n);
+            return (err = 1);
+        }
 
+        ++n;
         char *tmp_buf = new(std::nothrow) char [n];
         if (!tmp_buf)
         {
-            err = 1;
-            return -1;
+            fprintf(stderr, "<%s:%d> Error new char [%u]\n", __func__, __LINE__, n);
+            return (err = 1);
         }
 
         if (buf)
@@ -372,14 +392,13 @@ public:
         }
         buf = tmp_buf;
         buf_size = n;
-
         return 0;
     }
     //------------------------------------------------------------------
-    unsigned long size() const { return buf_len; }
-    unsigned long capacity() const { return buf_size; }
-    
-    void reduce(unsigned int n)
+    unsigned int size() const { return buf_len; }
+    unsigned int capacity() const { return buf_size; }
+
+    void resize(unsigned int n)
     {
         if (n >= buf_len)
             return;
@@ -394,12 +413,50 @@ public:
     //------------------------------------------------------------------
     void clear()
     {
-        buf_len = index_ = err = 0;
+        buf_len = offset = index_ = 0;
+        err = 0;
         if (buf)
-            *buf = 0;
+            *buf = '\0';
     }
     //------------------------------------------------------------------
     int error() const { return err; }
+    //------------------------------------------------------------------
+    const char *ptr_remain()
+    {
+        if (buf)
+        {
+            buf[buf_len] = 0;
+            return buf + offset;
+        }
+        else
+            return "";
+    }
+    //------------------------------------------------------------------
+    int size_remain() { return buf_len - offset; }
+    int get_offset() { return offset; }
+    int set_offset(int n)
+    {
+        if (n < 0)
+        {
+            fprintf(stderr, "<%s:%d> n=%d\n", __func__, __LINE__, n);
+            return -1;
+        }
+        else if (n == 0)
+        {
+            fprintf(stderr, "<%s:%d> n=%d\n", __func__, __LINE__, n);
+            return offset;
+        }
+
+        if ((offset + n) > buf_len)
+        {
+            fprintf(stderr, "<%s:%d> (offset(%u) + n(%d)) > buf_len(%u)\n", __func__, __LINE__, offset, n, buf_len);
+            offset = buf_len;
+            return -1;
+        }
+
+        offset += n;
+        return offset;
+    }
 };
 
 #endif

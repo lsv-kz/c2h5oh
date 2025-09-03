@@ -111,6 +111,31 @@ int strlcmp_case(const char *s1, const char *s2, int len)
     return 0;
 }
 //======================================================================
+int strcmp_case(const char *s1, const char *s2)
+{
+    char c1, c2;
+
+    if (!s1 && !s2) return 0;
+    if (!s1) return -1;
+    if (!s2) return 1;
+
+    int diff = ('a' - 'A');
+
+    for (; (*s1) && (*s2); ++s1, ++s2)
+    {
+        c1 = *s1;
+        c2 = *s2;
+        if (!c1 && !c2) return 0;
+
+        c1 += (c1 >= 'A') && (c1 <= 'Z') ? diff : 0;
+        c2 += (c2 >= 'A') && (c2 <= 'Z') ? diff : 0;
+
+        if (c1 != c2) return (c1 - c2);
+    }
+
+    return (*s1 - *s2);
+}
+//======================================================================
 int get_int_method(const char *s)
 {
     if (!memcmp(s, "GET", 3))
@@ -183,8 +208,6 @@ const char *get_str_operation(OPERATION_TYPE n)
             return "SSL_ACCEPT";
         case READ_REQUEST:
             return "READ_REQUEST";
-        case RESPONSE_PREPARE:
-            return "RESPONSE_PREPARE";
         case SEND_RESP_HEADERS:
             return "SEND_RESP_HEADERS";
         case SEND_ENTITY:
@@ -193,8 +216,6 @@ const char *get_str_operation(OPERATION_TYPE n)
             return "DYN_PAGE";
         case SSL_SHUTDOWN:
             return "SSL_SHUTDOWN";
-        case CLOSE_CONNECT:
-            return "CLOSE_CONNECT";
     }
 
     return "?";
@@ -204,50 +225,20 @@ const char *get_cgi_operation(CGI_OPERATION n)
 {
     switch (n)
     {
+        case FASTCGI_BEGIN:
+            return "FASTCGI_BEGIN";
+        case FASTCGI_PARAMS:
+            return "FASTCGI_PARAMS";
+        case SCGI_PARAMS:
+            return "SCGI_PARAMS";
         case CGI_STDIN:
             return "CGI_STDIN";
         case CGI_READ_HTTP_HEADERS:
             return "CGI_READ_HTTP_HEADERS";
         case CGI_SEND_HTTP_HEADERS:
             return "CGI_SEND_HTTP_HEADERS";
-        case CGI_SEND_ENTITY:
-            return "CGI_SEND_ENTITY";
-    }
-
-    return "?";
-}
-//======================================================================
-const char *get_fcgi_operation(FCGI_OPERATION n)
-{
-    switch (n)
-    {
-        case FASTCGI_BEGIN:
-            return "FASTCGI_BEGIN";
-        case FASTCGI_PARAMS:
-            return "FASTCGI_PARAMS";
-        case FASTCGI_STDIN:
-            return "FASTCGI_STDIN";
-        case FASTCGI_STDOUT:
-            return "FASTCGI_STDOUT";
-    }
-
-    return "?";
-}
-//======================================================================
-const char *get_scgi_operation(SCGI_OPERATION n)
-{
-    switch (n)
-    {
-        case SCGI_PARAMS:
-            return "SCGI_PARAMS";
-        case SCGI_STDIN:
-            return "SCGI_STDIN";
-        case SCGI_READ_HTTP_HEADERS:
-            return "SCGI_READ_HTTP_HEADERS";
-        case SCGI_SEND_HTTP_HEADERS:
-            return "SCGI_SEND_HTTP_HEADERS";
-        case SCGI_SEND_ENTITY:
-            return "SCGI_SEND_ENTITY";
+        case CGI_STDOUT:
+            return "CGI_STDOUT";
     }
 
     return "?";
@@ -453,7 +444,7 @@ const char *ishtmlvideo(FILE *f)
 const char *isaudiofile(FILE *f)
 {
     int size = 0;
-    char s[64];
+    char s[64] = {0};
 
     size = fread(s, 1, 63, f);
     if (size <= 0)
@@ -932,7 +923,7 @@ int parse_headers(Connect *req)
         else if (!strcmp(pName, "content-type:"))
         {
             req->req_hd.iReqContentType = i;
-print_err("content-type: %s\n", pVal);
+//print_err("content-type: %s\n", pVal);
         }
         else if (!strcmp(pName, "host:"))
         {

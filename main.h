@@ -75,20 +75,14 @@ enum {
     M_PATCH, M_DELETE, M_TRACE, M_CONNECT
 };
 enum { HTTP09 = 1, HTTP10, HTTP11, HTTP2 };
-
 enum PROTOCOL {HTTP = 1, HTTPS};
 enum MODE_SEND { NO_CHUNK, CHUNK, CHUNK_END };
 enum SOURCE_ENTITY { NO_ENTITY, FROM_FILE, FROM_DATA_BUFFER, MULTIPART_ENTITY, };
-enum OPERATION_TYPE { SSL_ACCEPT = 1, READ_REQUEST, RESPONSE_PREPARE, SEND_RESP_HEADERS, SEND_ENTITY, DYN_PAGE, SSL_SHUTDOWN, CLOSE_CONNECT, };
+enum OPERATION_TYPE { SSL_ACCEPT = 1, READ_REQUEST, SEND_RESP_HEADERS, SEND_ENTITY, DYN_PAGE, SSL_SHUTDOWN, };
 enum MULTIPART { SEND_HEADERS = 1, SEND_PART, SEND_END };
-enum IO_STATUS { WAIT = 1, WORK };
 enum DIRECT { FROM_CGI = 1, TO_CGI, FROM_CLIENT, TO_CLIENT };
-
 enum CGI_TYPE { NO_CGI, CGI, PHPCGI, PHPFPM, FASTCGI, SCGI, };
-enum FCGI_OPERATION { FASTCGI_BEGIN, FASTCGI_PARAMS, FASTCGI_STDIN, FASTCGI_STDOUT, };
-enum CGI_OPERATION { CGI_STDIN, CGI_READ_HTTP_HEADERS, CGI_SEND_HTTP_HEADERS, CGI_SEND_ENTITY };
-enum SCGI_OPERATION { SCGI_PARAMS, SCGI_STDIN, SCGI_READ_HTTP_HEADERS, SCGI_SEND_HTTP_HEADERS, SCGI_SEND_ENTITY };
-union OPERATION { CGI_OPERATION cgi; FCGI_OPERATION fcgi; SCGI_OPERATION scgi;};
+enum CGI_OPERATION { FASTCGI_BEGIN, FASTCGI_PARAMS, SCGI_PARAMS, CGI_STDIN, CGI_READ_HTTP_HEADERS, CGI_SEND_HTTP_HEADERS, CGI_STDOUT };
 //----------------------------------------------------------------------
 typedef struct fcgi_list_addr
 {
@@ -118,6 +112,8 @@ public:
     std::string ServerAddr;
     std::string ServerPort;
 
+    std::string Certificate;
+    std::string CertificateKey;
     std::string DocumentRoot;
     std::string ScriptPath;
     std::string LogPath;
@@ -127,16 +123,16 @@ public:
     std::string PathPHP;
 
     int ListenBacklog;
-    char TcpCork;
-    char TcpNoDelay;
+    bool TcpCork;
+    bool TcpNoDelay;
 
-    char LingerOn;
+    bool LingerOn;
     int LingerTime;
 
-    char SendFile;
+    bool SendFile;
     int SndBufSize;
 
-    char BalancedWorkThreads;
+    bool BalancedWorkThreads;
 
     int MaxAcceptConnections;
 
@@ -158,13 +154,13 @@ public:
     int TimeoutCGI;
     int TimeoutPoll;
 
-    char AutoIndex;
-    char index_html;
-    char index_php;
-    char index_pl;
-    char index_fcgi;
+    bool AutoIndex;
+    bool index_html;
+    bool index_php;
+    bool index_pl;
+    bool index_fcgi;
 
-    char ShowMediaFiles;
+    bool ShowMediaFiles;
 
     std::string user;
     std::string group;
@@ -221,7 +217,6 @@ public:
     int    timeout;
 
     OPERATION_TYPE operation;
-    IO_STATUS io_status;
     DIRECT io_direct;
 
     struct
@@ -275,27 +270,15 @@ public:
     char *reqHdName[MAX_HEADERS + 1];
     const char *reqHdValue[MAX_HEADERS + 1];
     //--------------------------------------
-    struct
-    {
-        String s;
-        const char *p;
-        int len;
-    } resp_headers;
-
+    String headers;
     String hdrs;
-
-    struct
-    {
-        String s;
-        const char *p;
-        int len;
-    } html;
+    String html;
 
     struct
     {
         String scriptName;
         CGI_TYPE cgi_type;
-        OPERATION op;
+        CGI_OPERATION op;
         int  size_buf = CGI_BUF_SIZE;
         char buf[CGI_BUF_SIZE + 16];
         int len_buf;
@@ -374,6 +357,9 @@ class EventHandlerClass
 
     int send_part_file(Connect *r);
     void del_from_list(Connect *r);
+    void end_resp(Connect *r);
+    void close_con(Connect *r);
+    void set_response(Connect *r);
 
     void worker(Connect *r);
     int send_html(Connect *r);
@@ -446,7 +432,7 @@ int prepare_response(Connect *r);
 int options(Connect *r);
 int index_dir(Connect *r, std::string& path);
 //----------------------------------------------------------------------
-int create_fcgi_socket(Connect *r, const char *host);
+int create_fcgi_socket(Connect *r, const std::string *host);
 int read_from_client(Connect *r, char *buf, int len);
 int write_to_client(Connect *r, const char *buf, int len);
 int read_request_headers(Connect* r);
@@ -465,6 +451,7 @@ std::string log_time(time_t t);
 
 const char *strstr_case(const char * s1, const char *s2);
 int strlcmp_case(const char *s1, const char *s2, int len);
+int strcmp_case(const char *s1, const char *s2);
 
 int get_int_method(const char *s);
 const char *get_str_method(int i);
@@ -474,8 +461,6 @@ const char *get_str_http_prot(int i);
 
 const char *get_str_operation(OPERATION_TYPE n);
 const char *get_cgi_operation(CGI_OPERATION n);
-const char *get_fcgi_operation(FCGI_OPERATION n);
-const char *get_scgi_operation(SCGI_OPERATION n);
 const char *get_cgi_type(CGI_TYPE n);
 const char *get_cgi_dir(DIRECT n);
 

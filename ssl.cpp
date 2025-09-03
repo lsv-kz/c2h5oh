@@ -7,8 +7,8 @@ void init_openssl()
     SSL_library_init();
     OpenSSL_add_ssl_algorithms();
     ////OpenSSL_add_all_algorithms();
-    //SSL_load_error_strings();
-    //ERR_load_crypto_strings();
+    SSL_load_error_strings();
+    ERR_load_crypto_strings();
 }
 //======================================================================
 void cleanup_openssl()
@@ -26,13 +26,13 @@ SSL_CTX *create_context()
 //======================================================================
 int configure_context(SSL_CTX *ctx)
 {
-    if (SSL_CTX_use_certificate_file(ctx, "cert/cert.pem", SSL_FILETYPE_PEM) != 1)
+    if (SSL_CTX_use_certificate_file(ctx, conf->Certificate.c_str(), SSL_FILETYPE_PEM) != 1)
     {
         fprintf(stderr, "<%s:%d> SSL_CTX_use_certificate_file failed\n", __func__, __LINE__);
         return -1;
     }
 
-    if (SSL_CTX_use_PrivateKey_file(ctx, "cert/key.pem", SSL_FILETYPE_PEM) != 1)
+    if (SSL_CTX_use_PrivateKey_file(ctx, conf->CertificateKey.c_str(), SSL_FILETYPE_PEM) != 1)
     {
         fprintf(stderr, "<%s:%d> SSL_CTX_use_PrivateKey_file failed\n", __func__, __LINE__);
         return -1;
@@ -95,8 +95,9 @@ const char *ssl_strerror(int err)
     return "?";
 }
 //======================================================================
-int ssl_read(Connect *req, char *buf, int len)// return: ERR_TRY_AGAIN | -1 | 0 | [num read bytes]
+int ssl_read(Connect *req, char *buf, int len)
 {
+    ERR_clear_error();
     int ret = SSL_read(req->tls.ssl, buf, len);
     if (ret <= 0)
     {
@@ -124,17 +125,10 @@ int ssl_read(Connect *req, char *buf, int len)// return: ERR_TRY_AGAIN | -1 | 0 
         }
     }
     else
-    {
-        int pend = SSL_pending(req->tls.ssl);
-        if (pend)
-            req->io_status = WORK;
-        else
-            req->io_status = WAIT;
         return ret;
-    }
 }
 //======================================================================
-int ssl_write(Connect *req, const char *buf, int len)// return: ERR_TRY_AGAIN | -1 | [num read bytes]
+int ssl_write(Connect *req, const char *buf, int len)
 {
     int ret = SSL_write(req->tls.ssl, buf, len);
     if (ret <= 0)
