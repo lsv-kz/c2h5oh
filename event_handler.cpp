@@ -116,7 +116,13 @@ void EventHandlerClass::del_from_list(Connect *r)
     else
     {
         if ((r->source_entity == FROM_FILE) || (r->source_entity == MULTIPART_ENTITY))
-            close(r->fd);
+        {
+            if (r->fd > 0)
+            {
+                close(r->fd);
+                r->fd = -1;
+            }
+        }
         else if (r->source_entity == FROM_DATA_BUFFER)
         {
             r->html.clear();

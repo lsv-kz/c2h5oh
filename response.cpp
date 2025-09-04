@@ -10,6 +10,56 @@ static std::condition_variable cond_list, cond_thr;
 static int num_thr = 0, thr_exit = 0, max_thr = 0, work_thr = 0, size_list = 0;
 static unsigned long all_req = 0;
 //======================================================================
+static void thread_set_response();
+static int set_response(Connect *req);
+static int send_file(Connect *req);
+static int send_multypart(Connect *req);
+//======================================================================
+long long file_size(const char *s)
+{
+    struct stat st;
+
+    if (!stat(s, &st))
+        return st.st_size;
+    else
+        return -1;
+}
+//======================================================================
+int fastcgi(Connect* r, const char* uri)
+{
+    const char *p = strrchr(uri, '/');
+    if (!p)
+        return -RS404;
+    fcgi_list_addr *i = conf->fcgi_list;
+    for (; i; i = i->next)
+    {
+        if (i->script_name[0] == '~')
+        {
+            if (!strcmp(p, i->script_name.c_str() + 1))
+                break;
+        }
+        else
+        {
+            if (uri == i->script_name)
+                break;
+        }
+    }
+
+    if (!i)
+        return -RS404;
+
+    r->cgi.script_path = &i->addr;
+    if (i->type == FASTCGI)
+        r->cgi.cgi_type = FASTCGI;
+    else if (i->type == SCGI)
+        r->cgi.cgi_type = SCGI;
+    else
+        return -RS404;
+    r->cgi.scriptName = i->script_name;
+    push_cgi(r);
+    return 0;
+}
+//======================================================================
 void push_resp_list(Connect *req)
 {
 lock_guard<mutex> lk(mtx_list);
@@ -117,7 +167,7 @@ void threads_manager()
     {
         try
         {
-            t = thread(parse_request_thread);
+            t = thread(thread_set_response);
         }
         catch(...)
         {
@@ -136,7 +186,7 @@ void threads_manager()
 
         try
         {
-            t = thread(parse_request_thread);
+            t = thread(thread_set_response);
         }
         catch(...)
         {
@@ -149,7 +199,7 @@ void threads_manager()
     print_err("<%s:%d> ***** exit threads_manager *****\n", __func__, __LINE__);
 }
 //======================================================================
-void parse_request_thread()
+void thread_set_response()
 {
     while (1)
     {
@@ -158,178 +208,99 @@ void parse_request_thread()
         {
             break;
         }
-        //--------------------------------------------------------------
-        req->err = parse_headers(req);
+
+        req->err = set_response(req);
         if (req->err < 0)
         {
-            print_err(req, "<%s:%d> Error parse_headers(): %d\n", __func__, __LINE__, req->err);
             if (exit_thread(req))
                 return;
-            continue;
-        }
-    #ifdef TCP_CORK_
-        if (conf->TcpCork)
-        {
-        #if defined(LINUX_)
-            int optval = 1;
-            setsockopt(req->clientSocket, SOL_TCP, TCP_CORK, &optval, sizeof(optval));
-        //#elif defined(FREEBSD_)
-        #else
-            int optval = 1;
-            setsockopt(req->clientSocket, IPPROTO_TCP, TCP_NOPUSH, &optval, sizeof(optval));
-        #endif
-        }
-    #endif
-        //--------------------------------------------------------------
-        if ((req->httpProt != HTTP10) && (req->httpProt != HTTP11))
-        {
-            req->err = -RS505;
-            if (exit_thread(req))
-                return;
-            continue;
-        }
-
-        if (req->numReq >= (unsigned int)conf->MaxRequestsPerClient || (req->httpProt == HTTP10))
-            req->connKeepAlive = 0;
-        else if (req->req_hd.iConnection == -1)
-            req->connKeepAlive = 1;
-
-        const char *p;
-        if ((p = strchr(req->uri, '?')))
-        {
-            req->uriLen = p - req->uri;
-            req->sReqParam = p + 1;
         }
         else
-            req->sReqParam = NULL;
-
-        int len = decode(req->uri, req->uriLen, req->decodeUri, sizeof(req->decodeUri));
-        if (len <= 0)
-        {
-            print_err(req, "<%s:%d> Error: decode URI\n", __func__, __LINE__);
-            req->err = -RS404;
-            if (exit_thread(req))
-                return;
-            continue;
-        }
-
-        if ((len = clean_path(req->decodeUri, len)) <= 0)
-        {
-            req->lenDecodeUri = 0;
-            if (len == 0)
-                req->err = -RS400;
-            else
-                req->err = len;
-            if (exit_thread(req))
-                return;
-            continue;
-        }
-        else
-            req->lenDecodeUri = len;
-
-        if (strstr(req->uri, ".php") && (conf->UsePHP != "php-cgi") && (conf->UsePHP != "php-fpm"))
-        {
-            print_err(req, "<%s:%d> Error UsePHP=%s\n", __func__, __LINE__, conf->UsePHP.c_str());
-            req->err = -RS404;
-            if (exit_thread(req))
-                return;
-            continue;
-        }
-
-        if (req->req_hd.iUpgrade >= 0)
-        {
-            print_err(req, "<%s:%d> req->upgrade: %s\n", __func__, __LINE__, req->reqHdValue[req->req_hd.iUpgrade]);
-            req->err = -RS505;
-            if (exit_thread(req))
-                return;
-            continue;
-        }
-        //--------------------------------------------------------------
-        if ((req->reqMethod != M_GET) &&
-            (req->reqMethod != M_HEAD) &&
-            (req->reqMethod != M_POST) &&
-            (req->reqMethod != M_OPTIONS))
-        {
-            req->err = -RS501;
-            if (exit_thread(req))
-                return;
-            continue;
-        }
-
-        int ret = prepare_response(req);
-        if (ret == 1)
         {
             if (exit_thread(NULL))
                 return;
-            continue;
         }
-        else if (ret < 0)
-        {
-            req->err = ret;
-        }
-        else
-        {
-            print_err("<%s:%d> !!! prepare_response()=%d\n", __func__, __LINE__, ret);
-            req->err = -1;
-        }
-
-        if (exit_thread(req))
-            return;
     }
 }
 //======================================================================
-int send_file(Connect *req);
-int send_multypart(Connect *req);
-//======================================================================
-long long file_size(const char *s)
+int set_response(Connect *req)
 {
-    struct stat st;
-
-    if (!stat(s, &st))
-        return st.st_size;
-    else
-        return -1;
-}
-//======================================================================
-int fastcgi(Connect* r, const char* uri)
-{
-    const char *p = strrchr(uri, '/');
-    if (!p)
-        return -RS404;
-    fcgi_list_addr *i = conf->fcgi_list;
-    for (; i; i = i->next)
+    req->err = parse_headers(req);
+    if (req->err < 0)
     {
-        if (i->script_name[0] == '~')
-        {
-            if (!strcmp(p, i->script_name.c_str() + 1))
-                break;
-        }
-        else
-        {
-            if (uri == i->script_name)
-                break;
-        }
+        print_err(req, "<%s:%d> Error parse_headers(): %d\n", __func__, __LINE__, req->err);
+        return req->err;
     }
 
-    if (!i)
-        return -RS404;
+    if ((req->reqMethod != M_GET) &&
+        (req->reqMethod != M_HEAD) &&
+        (req->reqMethod != M_POST) &&
+        (req->reqMethod != M_OPTIONS))
+    {
+        return -RS501;
+    }
+#ifdef TCP_CORK_
+    if (conf->TcpCork)
+    {
+    #if defined(LINUX_)
+        int optval = 1;
+        setsockopt(req->clientSocket, SOL_TCP, TCP_CORK, &optval, sizeof(optval));
+    //#elif defined(FREEBSD_)
+    #else
+        int optval = 1;
+        setsockopt(req->clientSocket, IPPROTO_TCP, TCP_NOPUSH, &optval, sizeof(optval));
+    #endif
+    }
+#endif
+    if (req->numReq >= (unsigned int)conf->MaxRequestsPerClient || (req->httpProt == HTTP10))
+        req->connKeepAlive = 0;
+    else if (req->req_hd.iConnection == -1)
+        req->connKeepAlive = 1;
 
-    r->cgi.script_path = &i->addr;
-    if (i->type == FASTCGI)
-        r->cgi.cgi_type = FASTCGI;
-    else if (i->type == SCGI)
-        r->cgi.cgi_type = SCGI;
+    const char *p;
+    if ((p = strchr(req->uri, '?')))
+    {
+        req->uriLen = p - req->uri;
+        req->sReqParam = p + 1;
+    }
     else
+        req->sReqParam = NULL;
+
+    int len = decode(req->uri, req->uriLen, req->decodeUri, sizeof(req->decodeUri));
+    if (len <= 0)
+    {
+        print_err(req, "<%s:%d> Error: decode URI\n", __func__, __LINE__);
         return -RS404;
-    r->cgi.scriptName = i->script_name;
-    push_cgi(r);
-    return 1;
-}
-//======================================================================
-int prepare_response(Connect *req)
-{
+    }
+
+    if ((len = clean_path(req->decodeUri, len)) <= 0)
+    {
+        req->lenDecodeUri = 0;
+        if (len == 0)
+            return -RS400;
+        else
+            return len;
+    }
+    else
+        req->lenDecodeUri = len;
+
+    if ((req->reqMethod == M_OPTIONS) && (!strcmp(req->uri, "*")))
+        return options(req);
+
+    if (strstr(req->uri, ".php") && (conf->UsePHP != "php-cgi") && (conf->UsePHP != "php-fpm"))
+    {
+        print_err(req, "<%s:%d> Error UsePHP=%s\n", __func__, __LINE__, conf->UsePHP.c_str());
+        return -RS404;
+    }
+
+    if (req->req_hd.iUpgrade >= 0)
+    {
+        print_err(req, "<%s:%d> req->upgrade: %s\n", __func__, __LINE__, req->reqHdValue[req->req_hd.iUpgrade]);
+        return -RS505;
+    }
+
     struct stat st;
-    char *p = strstr(req->decodeUri, ".php");
+    p = strstr(req->decodeUri, ".php");
     if (p && (*(p + 4) == 0))
     {
         struct stat st;
@@ -345,17 +316,17 @@ int prepare_response(Connect *req)
             req->cgi.script_path = &conf->PathPHP;
             req->cgi.cgi_type = PHPFPM;
             push_cgi(req);
-            return 1;
+            return 0;
         }
         else if (conf->UsePHP == "php-cgi")
         {
             req->cgi.scriptName = req->decodeUri;
             req->cgi.cgi_type = PHPCGI;
             push_cgi(req);
-            return 1;
+            return 0;
         }
 
-        return -1;
+        return -RS500;
     }
 
     if (!strncmp(req->decodeUri, "/cgi-bin/", 9) || !strncmp(req->decodeUri, "/cgi/", 5))
@@ -363,7 +334,7 @@ int prepare_response(Connect *req)
         req->cgi.cgi_type = CGI;
         req->cgi.scriptName = req->decodeUri;
         push_cgi(req);
-        return 1;
+        return 0;
     }
     //------------------------------------------------------------------
     string path;
@@ -463,16 +434,16 @@ int prepare_response(Connect *req)
                         req->cgi.script_path = &conf->PathPHP;
                         req->cgi.cgi_type = PHPFPM;
                         push_cgi(req);
-                        return 1;
+                        return 0;
                     }
                     else if (conf->UsePHP == "php-cgi")
                     {
                         req->cgi.cgi_type = PHPCGI;
                         push_cgi(req);
-                        return 1;
+                        return 0;
                     }
 
-                    return -1;
+                    return -RS500;
                 }
                 path.resize(len);
             }
@@ -482,14 +453,14 @@ int prepare_response(Connect *req)
                 req->cgi.cgi_type = CGI;
                 req->cgi.scriptName = "/cgi-bin/index.pl";
                 push_cgi(req);
-                return 1;
+                return 0;
             }
             else if (conf->index_fcgi)
             {
                 req->cgi.cgi_type = FASTCGI;
                 req->cgi.scriptName = "/index.fcgi";
                 push_cgi(req);
-                return 1;
+                return 0;
             }
 
             path.reserve(path.capacity() + 256);
@@ -523,8 +494,11 @@ int prepare_response(Connect *req)
     path.reserve(0);
 
     ret = send_file(req);
-    if (ret != 1)
+    if (ret < 0)
+    {
         close(req->fd);
+        req->fd = -1;
+    }
 
     return ret;
 }
@@ -576,7 +550,7 @@ int send_file(Connect *req)
     if (create_response_headers(req))
         return -1;
     push_send_file(req);
-    return 1;
+    return 0;
 }
 //======================================================================
 int create_multipart_head(Connect *req);
@@ -609,7 +583,7 @@ int send_multypart(Connect *req)
     if (create_response_headers(req))
         return -1;
     push_send_multipart(req);
-    return 1;
+    return 0;
 }
 //======================================================================
 int create_multipart_head(Connect *req)
@@ -635,5 +609,5 @@ int options(Connect *r)
         return -1;
     r->html.clear();
     push_send_html(r);
-    return 1;
+    return 0;
 }

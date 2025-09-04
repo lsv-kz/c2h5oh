@@ -105,7 +105,7 @@ void end_response(Connect *r)
         {
             r->respStatus = -r->err;
             r->err = 0;
-            if (send_message(r, NULL) == 1)
+            if (send_message(r, NULL) == 0)
                 return;
         }
 

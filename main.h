@@ -74,7 +74,7 @@ enum {
     M_GET = 1, M_HEAD, M_POST, M_OPTIONS, M_PUT,
     M_PATCH, M_DELETE, M_TRACE, M_CONNECT
 };
-enum { HTTP09 = 1, HTTP10, HTTP11, HTTP2 };
+enum { HTTP10, HTTP11, };
 enum PROTOCOL {HTTP = 1, HTTPS};
 enum MODE_SEND { NO_CHUNK, CHUNK, CHUNK_END };
 enum SOURCE_ENTITY { NO_ENTITY, FROM_FILE, FROM_DATA_BUFFER, MULTIPART_ENTITY, };
@@ -427,8 +427,6 @@ public:
 //----------------------------------------------------------------------
 extern char **environ;
 //----------------------------------------------------------------------
-void parse_request_thread();
-int prepare_response(Connect *r);
 int options(Connect *r);
 int index_dir(Connect *r, std::string& path);
 //----------------------------------------------------------------------

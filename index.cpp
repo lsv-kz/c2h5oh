@@ -258,5 +258,5 @@ int index_dir(Connect *r, string& path)
     }
 
     push_send_html(r);
-    return 1;
+    return 0;
 }

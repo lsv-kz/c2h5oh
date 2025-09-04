@@ -21,7 +21,7 @@ int create_response_headers(Connect *req)
     if (conf->ServerSoftware.size())
         req->headers << "Server: " << conf->ServerSoftware << "\r\n";
 
-    if (req->reqMethod == M_OPTIONS)
+    if ((req->reqMethod == M_OPTIONS) && (req->respStatus == RS200))
         req->headers << "Allow: OPTIONS, GET, HEAD, POST\r\n";
 
     if (req->respStatus == RS204)
@@ -126,11 +126,11 @@ int send_message(Connect *r, const char *msg)
     }
 
     r->mode_send = NO_CHUNK;
-    if ((r->httpProt != HTTP09) && create_response_headers(r))
+    if (create_response_headers(r))
         return -1;
 
     push_send_html(r);
-    return 1;
+    return 0;
 }
 //======================================================================
 const char *status_resp(int st)

@@ -177,10 +177,6 @@ int get_int_http_prot(const char *s)
         return HTTP11;
     else if (!memcmp(s, "HTTP/1.0", 8))
         return HTTP10;
-    else if (!memcmp(s, "HTTP/0.9", 8))
-        return HTTP09;
-    else if (!memcmp(s, "HTTP/2", 6))
-        return HTTP2;
     else
         return 0;
 }
@@ -193,8 +189,6 @@ const char *get_str_http_prot(int i)
             return "HTTP/1.1";
         case HTTP10:
             return "HTTP/1.0";
-        case HTTP09:
-            return "HTTP/0.9";
     }
 
     return "";
@@ -841,17 +835,6 @@ int parse_startline_request(Connect *req, char *s)
     req->uri = p_val;
     //------------------------------ version ---------------------------
     p_val = p;
-    /*while (*p)
-    {
-        if (*p == ' ')
-        {
-            *p = 0;
-            p++;
-            break;
-        }
-        p++;
-    }*/
-
     if (!(req->httpProt = get_int_http_prot(p_val)))
     {
         print_err(req, "<%s:%d> Error version protocol: [%s]\n", __func__, __LINE__, req->uri);
@@ -870,12 +853,6 @@ int parse_headers(Connect *req)
         if (pName == NULL)
         {
             print_err(req, "<%s:%d> Error: header is empty\n",  __func__, __LINE__);
-            return -1;
-        }
-
-        if (req->httpProt == HTTP09)
-        {
-            print_err(req, "<%s:%d> Error version protocol\n", __func__, __LINE__);
             return -1;
         }
 
